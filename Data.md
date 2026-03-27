@@ -46,7 +46,7 @@ europa.eu/catalogue/copernicus/api/records/3bf542bd-eebd-
 4d73-b53c-a0243f2ed862?language=all (visited on 05/27/2025)
 ```
 
-This project as well uses the Brazilian Instituto Nacional de Pesquisas Espaciais (INPE) PRODES project information from the "Yearly increment in native vegetation suppression - Shapefile" Dataset time-series (2000-2024) available at their [portal](https://terrabrasilis.dpi.inpe.br/en/download-files/).
+This project as well uses the Brazilian Instituto Nacional de Pesquisas Espaciais (INPE) PRODES project information from the "Yearly increment in native vegetation suppression - Shapefile" Dataset time-series (2002-2024) available at their [portal](https://terrabrasilis.dpi.inpe.br/en/download-files/).
 
 Citation:
 ```md
