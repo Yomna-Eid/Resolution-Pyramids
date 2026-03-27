@@ -46,9 +46,9 @@ europa.eu/catalogue/copernicus/api/records/3bf542bd-eebd-
 4d73-b53c-a0243f2ed862?language=all (visited on 05/27/2025)
 ```
 
-As well as the Brazilian Instituto Nacional de Pesquisas Espaciais (INPE) PRODES project information from the "Accumulated Deforestation Shapefiles (2000)" time-series (2000-2024), available at their [portal](https://terrabrasilis.dpi.inpe.br/en/download-files/).
+This project as well uses the Brazilian Instituto Nacional de Pesquisas Espaciais (INPE) PRODES project information from the "Yearly increment in native vegetation suppression - Shapefile" Dataset time-series (2000-2024) available at their [portal](https://terrabrasilis.dpi.inpe.br/en/download-files/).
 
 Citation:
 ```md
-[6] INSTITUTO NACIONAL DE PESQUISAS ESPACIAIS (INPE). Bioma Cerrado-Prodes(Desmatamento): Máscara de área acumulada de supressão da vegetação nativa - Shapefile (2000). 2024. Available at: https://terrabrasilis.dpi.inpe.br/geonetwork/srv/por/catalog.search#/metadata/504416f5-b09d-4dce-adb9-5673ad5bd0b2 Accessed on: 05/27/2025.
+[6] INSTITUTO NACIONAL DE PESQUISAS ESPACIAIS (INPE). Bioma Cerrado-Prodes(Desmatamento): Incremento na supressão da vegetação nativa para o bioma Cerrado. 2024. Available at: https://terrabrasilis.dpi.inpe.br/geonetwork/srv/por/catalog.search#/metadata/6b621182-93d6-4a83-b5db-ae53a621276d Accessed on: 05/27/2025.
 ```
