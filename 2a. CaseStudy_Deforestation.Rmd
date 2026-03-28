@@ -1,0 +1,590 @@
+---
+title: "PRODES_Deforestation_Maps"
+author: "Yomna Eid"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load the packages:
+
+```{r echo=FALSE}
+library(stars)
+library(tidyverse)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(ggplot2)
+```
+
+
+Load the PRODES Deforestation Dataset and set the working directory
+
+Check for the correct working directory, and make sure that the data is locally present in the ./Data folder within your directory.
+
+The dataset is the PRODES Deforestation Dataset of vector shapefiles provided by INPE (the Brazilian National Institute for Space Research), with a native resolution of 30m. The termporal extent is 2002-2024, with a total of 19 time-stamps. The map provided every 2 years for the period 2002-2012, and then annually for the period of 2012-2024.
+
+We also subset the data to the bounding box of our study area, the city Minaçu in the State Goiás.
+
+```{r}
+# Check the you're in the correct working directory
+getwd()
+
+sf_use_s2(FALSE)
+
+prodes_def <- st_read("./Data/yearly_deforestation/yearly_deforestation.shp") %>% st_make_valid() %>% st_buffer(0)
+prodes_def <- prodes_def[st_is_valid(prodes_def), ]
+
+minacu_query <- opq("Minaçu, Brazil") %>% 
+  add_osm_feature(key = "boundary", value = "administrative") %>% 
+  add_osm_feature(key = "name", value = "Minaçu")
+
+minacu_sf <- osmdata_sf(minacu_query)
+minacu_boundary <- minacu_sf$osm_multipolygons %>% st_transform(st_crs(prodes_def)) 
+
+prodes_def <- st_intersection(prodes_def, st_as_sfc(st_bbox(minacu_boundary)))
+```
+
+Clean up the dataset:
+
+```{r}
+prodes_def$main_class[prodes_def$main_class == "desmatamento"] <-  "deforestation"
+
+prodes_def <- prodes_def[, !(names(prodes_def) %in% c("def_cloud", "class_name", "uuid", "satellite", "sensor", "source", "scene_id", "main_class"))] %>% select(where(~ all(!is.na(.))))
+```
+
+Plot the data overlayed with the Minaçu administrative boundaries:
+
+```{r}
+ggplot() +
+  #geom_sf(data = t, fill = NA, color = "red") +
+  geom_sf(data = st_as_sfc(st_bbox(minacu_boundary)), fill = "lightgreen", color = "darkgreen") +
+  geom_sf(data = prodes_def$geometry, fill = "red", alpha = 0.5, color = "red", size = 1) +
+  theme_minimal() +
+  ggtitle("PRODES Deforestation Polygon Overlaid on Brazil - Year 2002")
+```
+
+Split the dataset into variables for each individual year:
+
+```{r}
+years <- prodes_def$year %>% unique() %>% sort(decreasing = F)
+
+for (yr in years) {
+  assign(
+    paste0("df_", yr), 
+    prodes_def %>% 
+      filter(.data$year == yr) %>%  
+      arrange(image_date) %>% 
+      st_transform(31982)
+  )
+}
+```
+
+Rasterize the vector shape files for each time-stamp in the time-series available into Forest/Non-Forest Maps. Create a template raster first:
+
+```{r}
+# Create a new grid with desired resolution (30m)
+bbox <- st_bbox(df_2002)
+proj_crs <- st_crs(df_2002)
+nx <- ceiling((bbox$xmax - bbox$xmin) / 30)
+ny <- ceiling((bbox$ymax - bbox$ymin) / 30)
+
+grd <- st_as_stars(bbox, nx=nx, ny=ny, values=1, crs=proj_crs)
+delta_x <- (bbox["xmax"] - bbox["xmin"])/nx
+delta_y <- (bbox["ymax"] - bbox["ymin"])/ny
+print(delta_x) # Should be close to 30
+print(delta_y) # Should be close to 30
+```
+
+Then rasterize by masking:
+
+```{r}
+prodes_2002 <- st_crop(target3, df_2002$geometry)
+prodes_2004 <- st_crop(target3, df_2004$geometry, crop = FALSE) %>% st_mosaic(prodes_2002)
+prodes_2006 <- st_crop(target3, df_2006$geometry, crop = FALSE) %>% st_mosaic(prodes_2004)
+prodes_2008 <- st_crop(target3, df_2008$geometry, crop = FALSE) %>% st_mosaic(prodes_2006)
+prodes_2010 <- st_crop(target3, df_2010$geometry, crop = FALSE) %>% st_mosaic(prodes_2008)
+prodes_2012 <- st_crop(target3, df_2012$geometry, crop = FALSE) %>% st_mosaic(prodes_2010)
+prodes_2013 <- st_crop(target3, df_2013$geometry, crop = FALSE) %>% st_mosaic(prodes_2012)
+prodes_2014 <- st_crop(target3, df_2014$geometry, crop = FALSE) %>% st_mosaic(prodes_2013)
+prodes_2015 <- st_crop(target3, df_2015$geometry, crop = FALSE) %>% st_mosaic(prodes_2014)
+prodes_2016 <- st_crop(target3, df_2016$geometry, crop = FALSE) %>% st_mosaic(prodes_2015)
+prodes_2017 <- st_crop(target3, df_2017$geometry, crop = FALSE) %>% st_mosaic(prodes_2016)
+prodes_2018 <- st_crop(target3, df_2018$geometry, crop = FALSE) %>% st_mosaic(prodes_2017)
+prodes_2019 <- st_crop(target3, df_2019$geometry, crop = FALSE) %>% st_mosaic(prodes_2018)
+prodes_2020 <- st_crop(target3, df_2020$geometry, crop = FALSE) %>% st_mosaic(prodes_2019)
+prodes_2021 <- st_crop(target3, df_2021$geometry, crop = FALSE) %>% st_mosaic(prodes_2020)
+prodes_2022 <- st_crop(target3, df_2022$geometry, crop = FALSE) %>% st_mosaic(prodes_2021)
+prodes_2023 <- st_crop(target3, df_2023$geometry, crop = FALSE) %>% st_mosaic(prodes_2022)
+prodes_2024 <- st_crop(target3, df_2024$geometry, crop = FALSE) %>% st_mosaic(prodes_2023)
+```
+
+Plot the resulting raster map:
+
+```{r}
+ggplot() +
+  geom_sf(data = st_as_sfc(st_bbox(st_transform(minacu_boundary,crs=31982))), fill = "lightgreen", color = "darkgreen") +
+  #geom_sf(data = st_as_sfc(st_bbox(df)), fill = "blue", alpha = 0.5, color = "red", size = 1) +
+  geom_sf(data = st_as_sfc(st_bbox(df_2002_proj)), fill = "red", alpha = 0.5, color = "red", size = 1) +
+  #geom_tile(data = na.omit(as.data.frame(target2)), xy = TRUE, aes(x = x, y = y, fill = values)) +   # Raster
+  #geom_sf(data = t[t$name ==  "Goiás", ], fill = NA, color = "yellow") +
+  theme_minimal() +
+  ggtitle("PRODES Deforestation Polygon Overlaid on Brazil - Year 2002")
+```
+
+Now, downsample the Deforestation raster map time-series from a 30m native resolution to lower resolutions of 60m, 90m, 120m, 300m, 600m, 900m, 1.2km, 3km, 6km, 9km, 12km. Then we save the resulting maps into the ./Results directory.
+
+```{r}
+output_dir <- "Results"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+output_dir <- "Deforestation"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+```
+
+```{r}
+output_dir <- "2002"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2002 <- st_downsample(prodes_2002, c(1,1))
+downsampled90m_2002 <- st_downsample(prodes_2002, c(3,3))
+downsampled120m_2002 <- st_downsample(prodes_2002, c(4,4))
+downsampled300m_2002 <- st_downsample(prodes_2002, c(9,9))
+downsampled600m_2002 <- st_downsample(prodes_2002, c(19,19))
+downsampled900m_2002 <- st_downsample(prodes_2002, c(29,29))
+downsampled1200m_2002 <- st_downsample(prodes_2002, c(39,39))
+downsampled3000m_2002 <- st_downsample(prodes_2002, c(99,99))
+downsampled6000m_2002 <- st_downsample(prodes_2002, c(199,199))
+downsampled9000m_2002 <- st_downsample(prodes_2002, c(299,299))
+downsampled12000m_2002 <- st_downsample(prodes_2002, c(399,399))
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2002)), ".tif"))
+
+ds_2002 <- list(downsampled60m_2002, downsampled90m_2002, downsampled120m_2002, downsampled300m_2002, downsampled600m_2002, downsampled900m_2002, downsampled1200m_2002, downsampled3000m_2002, downsampled6000m_2002, downsampled9000m_2002, downsampled12000m_2002)
+
+write_stars(prodes_2002, save_file)
+
+for (i in seq_along(ds_2002)) {
+  write_stars(ds_2002[[i]], file.path(path, paste0("prodes2002_downsampled_", i, ".tif")))
+}
+```
+
+```{r}
+output_dir <- "2004"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2004 <- st_downsample(prodes_2004, c(1,1))
+downsampled90m_2004 <- st_downsample(prodes_2004, c(3,3))
+downsampled120m_2004 <- st_downsample(prodes_2004, c(4,4))
+downsampled300m_2004 <- st_downsample(prodes_2004, c(9,9))
+downsampled600m_2004 <- st_downsample(prodes_2004, c(19,19))
+downsampled900m_2004 <- st_downsample(prodes_2004, c(29,29))
+downsampled1200m_2004 <- st_downsample(prodes_2004, c(39,39))
+downsampled3000m_2004 <- st_downsample(prodes_2004, c(99,99))
+downsampled6000m_2004 <- st_downsample(prodes_2004, c(199,199))
+downsampled9000m_2004 <- st_downsample(prodes_2004, c(299,299))
+downsampled12000m_2004 <- st_downsample(prodes_2004, c(399,399))
+
+ds_2004 <- list(downsampled60m_2004, downsampled90m_2004, downsampled120m_2004, downsampled300m_2004, downsampled600m_2004, downsampled900m_2004, downsampled1200m_2004, downsampled3000m_2004, downsampled6000m_2004, downsampled9000m_2004, downsampled12000m_2004)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2004)), ".tif"))
+
+write_stars(prodes_2004, save_file)
+
+for (i in seq_along(ds_2004)) {
+  write_stars(ds_2004[[i]], file.path(path, paste0("prodes2004_downsampled_", i, ".tif")))
+}
+```
+
+```{r}
+output_dir <- "2006"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2006 <- st_downsample(prodes_2006, c(1,1))
+downsampled90m_2006 <- st_downsample(prodes_2006, c(3,3))
+downsampled120m_2006 <- st_downsample(prodes_2006, c(4,4))
+downsampled300m_2006 <- st_downsample(prodes_2006, c(9,9))
+downsampled600m_2006 <- st_downsample(prodes_2006, c(19,19))
+downsampled900m_2006 <- st_downsample(prodes_2006, c(29,29))
+downsampled1200m_2006 <- st_downsample(prodes_2006, c(39,39))
+downsampled3000m_2006 <- st_downsample(prodes_2006, c(99,99))
+downsampled6000m_2006 <- st_downsample(prodes_2006, c(199,199))
+downsampled9000m_2006 <- st_downsample(prodes_2006, c(299,299))
+downsampled12000m_2006 <- st_downsample(prodes_2006, c(399,399))
+
+ds_2006 <- list(downsampled60m_2006, downsampled90m_2006, downsampled120m_2006, downsampled300m_2006, downsampled600m_2006, downsampled900m_2006, downsampled1200m_2006, downsampled3000m_2006, downsampled6000m_2006, downsampled9000m_2006, downsampled12000m_2006)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2006)), ".tif"))
+
+write_stars(prodes_2006, save_file)
+
+for (i in seq_along(ds_2006)) {
+  write_stars(ds_2006[[i]], file.path(path, paste0("prodes2006_downsampled_", i, ".tif")))
+}
+```
+
+```{r}
+output_dir <- "2008"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2008 <- st_downsample(prodes_2008, c(1,1))
+downsampled90m_2008 <- st_downsample(prodes_2008, c(3,3))
+downsampled120m_2008 <- st_downsample(prodes_2008, c(4,4))
+downsampled300m_2008 <- st_downsample(prodes_2008, c(9,9))
+downsampled600m_2008 <- st_downsample(prodes_2008, c(19,19))
+downsampled900m_2008 <- st_downsample(prodes_2008, c(29,29))
+downsampled1200m_2008 <- st_downsample(prodes_2008, c(39,39))
+downsampled3000m_2008 <- st_downsample(prodes_2008, c(99,99))
+downsampled6000m_2008 <- st_downsample(prodes_2008, c(199,199))
+downsampled9000m_2008 <- st_downsample(prodes_2008, c(299,299))
+downsampled12000m_2008 <- st_downsample(prodes_2008, c(399,399))
+
+ds_2008 <- list(downsampled60m_2008, downsampled90m_2008, downsampled120m_2008, downsampled300m_2008, downsampled600m_2008, downsampled900m_2008, downsampled1200m_2008, downsampled3000m_2008, downsampled6000m_2008, downsampled9000m_2008, downsampled12000m_2008)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2008)), ".tif"))
+
+write_stars(prodes_2008, save_file)
+
+for (i in seq_along(ds_2008)) {
+  write_stars(ds_2008[[i]], file.path(path, paste0("prodes2008_downsampled_", i, ".tif")))
+}
+```
+
+```{r}
+output_dir <- "2010"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2010 <- st_downsample(prodes_2010, c(1,1))
+downsampled90m_2010 <- st_downsample(prodes_2010, c(3,3))
+downsampled120m_2010 <- st_downsample(prodes_2010, c(4,4))
+downsampled300m_2010 <- st_downsample(prodes_2010, c(9,9))
+downsampled600m_2010 <- st_downsample(prodes_2010, c(19,19))
+downsampled900m_2010 <- st_downsample(prodes_2010, c(29,29))
+downsampled1200m_2010 <- st_downsample(prodes_2010, c(39,39))
+downsampled3000m_2010 <- st_downsample(prodes_2010, c(99,99))
+downsampled6000m_2010 <- st_downsample(prodes_2010, c(199,199))
+downsampled9000m_2010 <- st_downsample(prodes_2010, c(299,299))
+downsampled12000m_2010 <- st_downsample(prodes_2010, c(399,399))
+
+ds_2010 <- list(downsampled60m_2010, downsampled90m_2010, downsampled120m_2010, downsampled300m_2010, downsampled600m_2010, downsampled900m_2010, downsampled1200m_2010, downsampled3000m_2010, downsampled6000m_2010, downsampled9000m_2010, downsampled12000m_2010)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2010)), ".tif"))
+
+write_stars(prodes_2010, save_file)
+
+for (i in seq_along(ds_2010)) {
+  write_stars(ds_2010[[i]], file.path(path, paste0("prodes2010_downsampled_", i, ".tif")))
+}
+```
+
+```{r}
+output_dir <- "2012"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2012 <- st_downsample(prodes_2012, c(1,1))
+downsampled90m_2012 <- st_downsample(prodes_2012, c(3,3))
+downsampled120m_2012 <- st_downsample(prodes_2012, c(4,4))
+downsampled300m_2012 <- st_downsample(prodes_2012, c(9,9))
+downsampled600m_2012 <- st_downsample(prodes_2012, c(19,19))
+downsampled900m_2012 <- st_downsample(prodes_2012, c(29,29))
+downsampled1200m_2012 <- st_downsample(prodes_2012, c(39,39))
+downsampled3000m_2012 <- st_downsample(prodes_2012, c(99,99))
+downsampled6000m_2012 <- st_downsample(prodes_2012, c(199,199))
+downsampled9000m_2012 <- st_downsample(prodes_2012, c(299,299))
+downsampled12000m_2012 <- st_downsample(prodes_2012, c(399,399))
+
+ds_2012 <- list(downsampled60m_2012, downsampled90m_2012, downsampled120m_2012, downsampled300m_2012, downsampled600m_2012, downsampled900m_2012, downsampled1200m_2012, downsampled3000m_2012, downsampled6000m_2012, downsampled9000m_2012, downsampled12000m_2012)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2012)), ".tif"))
+
+write_stars(prodes_2012, save_file)
+
+for (i in seq_along(ds_2012)) {
+  write_stars(ds_2012[[i]], file.path(path, paste0("prodes2012_downsampled_", i, ".tif")))
+}
+
+```
+
+```{r}
+output_dir <- "2014"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2014 <- st_downsample(prodes_2014, c(1,1))
+downsampled90m_2014 <- st_downsample(prodes_2014, c(3,3))
+downsampled120m_2014 <- st_downsample(prodes_2014, c(4,4))
+downsampled300m_2014 <- st_downsample(prodes_2014, c(9,9))
+downsampled600m_2014 <- st_downsample(prodes_2014, c(19,19))
+downsampled900m_2014 <- st_downsample(prodes_2014, c(29,29))
+downsampled1200m_2014 <- st_downsample(prodes_2014, c(39,39))
+downsampled3000m_2014 <- st_downsample(prodes_2014, c(99,99))
+downsampled6000m_2014 <- st_downsample(prodes_2014, c(199,199))
+downsampled9000m_2014 <- st_downsample(prodes_2014, c(299,299))
+downsampled12000m_2014 <- st_downsample(prodes_2014, c(399,399))
+
+ds_2014 <- list(downsampled60m_2014, downsampled90m_2014, downsampled120m_2014, downsampled300m_2014, downsampled600m_2014, downsampled900m_2014, downsampled1200m_2014, downsampled3000m_2014, downsampled6000m_2014, downsampled9000m_2014, downsampled12000m_2014)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2014)), ".tif"))
+
+write_stars(prodes_2014, save_file)
+
+for (i in seq_along(ds_2014)) {
+  write_stars(ds_2014[[i]], file.path(path, paste0("prodes2014_downsampled_", i, ".tif")))
+}
+
+```
+
+```{r}
+output_dir <- "2016"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2016 <- st_downsample(prodes_2016, c(1,1))
+downsampled90m_2016 <- st_downsample(prodes_2016, c(3,3))
+downsampled120m_2016 <- st_downsample(prodes_2016, c(4,4))
+downsampled300m_2016 <- st_downsample(prodes_2016, c(9,9))
+downsampled600m_2016 <- st_downsample(prodes_2016, c(19,19))
+downsampled900m_2016 <- st_downsample(prodes_2016, c(29,29))
+downsampled1200m_2016 <- st_downsample(prodes_2016, c(39,39))
+downsampled3000m_2016 <- st_downsample(prodes_2016, c(99,99))
+downsampled6000m_2016 <- st_downsample(prodes_2016, c(199,199))
+downsampled9000m_2016 <- st_downsample(prodes_2016, c(299,299))
+downsampled12000m_2016 <- st_downsample(prodes_2016, c(399,399))
+
+ds_2016 <- list(downsampled60m_2016, downsampled90m_2016, downsampled120m_2016, downsampled300m_2016, downsampled600m_2016, downsampled900m_2016, downsampled1200m_2016, downsampled3000m_2016, downsampled6000m_2016, downsampled9000m_2016, downsampled12000m_2016)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2016)), ".tif"))
+
+write_stars(prodes_2016, save_file)
+
+for (i in seq_along(ds_2016)) {
+  write_stars(ds_2016[[i]], file.path(path, paste0("prodes2016_downsampled_", i, ".tif")))
+}
+
+```
+
+```{r}
+output_dir <- "2018"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2018 <- st_downsample(prodes_2018, c(1,1))
+downsampled90m_2018 <- st_downsample(prodes_2018, c(3,3))
+downsampled120m_2018 <- st_downsample(prodes_2018, c(4,4))
+downsampled300m_2018 <- st_downsample(prodes_2018, c(9,9))
+downsampled600m_2018 <- st_downsample(prodes_2018, c(19,19))
+downsampled900m_2018 <- st_downsample(prodes_2018, c(29,29))
+downsampled1200m_2018 <- st_downsample(prodes_2018, c(39,39))
+downsampled3000m_2018 <- st_downsample(prodes_2018, c(99,99))
+downsampled6000m_2018 <- st_downsample(prodes_2018, c(199,199))
+downsampled9000m_2018 <- st_downsample(prodes_2018, c(299,299))
+downsampled12000m_2018 <- st_downsample(prodes_2018, c(399,399))
+
+ds_2018 <- list(downsampled60m_2018, downsampled90m_2018, downsampled120m_2018, downsampled300m_2018, downsampled600m_2018, downsampled900m_2018, downsampled1200m_2018, downsampled3000m_2018, downsampled6000m_2018, downsampled9000m_2018, downsampled12000m_2018)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2018)), ".tif"))
+
+write_stars(prodes_2018, save_file)
+
+for (i in seq_along(ds_2018)) {
+  write_stars(ds_2018[[i]], file.path(path, paste0("prodes2018_downsampled_", i, ".tif")))
+}
+
+```
+
+```{r}
+output_dir <- "2020"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2020 <- st_downsample(prodes_2020, c(1,1))
+downsampled90m_2020 <- st_downsample(prodes_2020, c(3,3))
+downsampled120m_2020 <- st_downsample(prodes_2020, c(4,4))
+downsampled300m_2020 <- st_downsample(prodes_2020, c(9,9))
+downsampled600m_2020 <- st_downsample(prodes_2020, c(19,19))
+downsampled900m_2020 <- st_downsample(prodes_2020, c(29,29))
+downsampled1200m_2020 <- st_downsample(prodes_2020, c(39,39))
+downsampled3000m_2020 <- st_downsample(prodes_2020, c(99,99))
+downsampled6000m_2020 <- st_downsample(prodes_2020, c(199,199))
+downsampled9000m_2020 <- st_downsample(prodes_2020, c(299,299))
+downsampled12000m_2020 <- st_downsample(prodes_2020, c(399,399))
+
+ds_2020 <- list(downsampled60m_2020, downsampled90m_2020, downsampled120m_2020, downsampled300m_2020, downsampled600m_2020, downsampled900m_2020, downsampled1200m_2020, downsampled3000m_2020, downsampled6000m_2020, downsampled9000m_2020, downsampled12000m_2020)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2020)), ".tif"))
+
+write_stars(prodes_2020, save_file)
+
+for (i in seq_along(ds_2020)) {
+  write_stars(ds_2020[[i]], file.path(path, paste0("prodes2020_downsampled_", i, ".tif")))
+}
+
+```
+
+```{r}
+output_dir <- "2022"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2022 <- st_downsample(prodes_2022, c(1,1))
+downsampled90m_2022 <- st_downsample(prodes_2022, c(3,3))
+downsampled120m_2022 <- st_downsample(prodes_2022, c(4,4))
+downsampled300m_2022 <- st_downsample(prodes_2022, c(9,9))
+downsampled600m_2022 <- st_downsample(prodes_2022, c(19,19))
+downsampled900m_2022 <- st_downsample(prodes_2022, c(29,29))
+downsampled1200m_2022 <- st_downsample(prodes_2022, c(39,39))
+downsampled3000m_2022 <- st_downsample(prodes_2022, c(99,99))
+downsampled6000m_2022 <- st_downsample(prodes_2022, c(199,199))
+downsampled9000m_2022 <- st_downsample(prodes_2022, c(299,299))
+downsampled12000m_2022 <- st_downsample(prodes_2022, c(399,399))
+
+ds_2022 <- list(downsampled60m_2022, downsampled90m_2022, downsampled120m_2022, downsampled300m_2022, downsampled600m_2022, downsampled900m_2022, downsampled1200m_2022, downsampled3000m_2022, downsampled6000m_2022, downsampled9000m_2022, downsampled12000m_2022)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2022)), ".tif"))
+
+write_stars(prodes_2022, save_file)
+
+for (i in seq_along(ds_2022)) {
+  write_stars(ds_2022[[i]], file.path(path, paste0("prodes2022_downsampled_", i, ".tif")))
+}
+
+```
+
+```{r}
+output_dir <- "2024"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+downsampled60m_2024 <- st_downsample(prodes_2024, c(1,1))
+downsampled90m_2024 <- st_downsample(prodes_2024, c(3,3))
+downsampled120m_2024 <- st_downsample(prodes_2024, c(4,4))
+downsampled300m_2024 <- st_downsample(prodes_2024, c(9,9))
+downsampled600m_2024 <- st_downsample(prodes_2024, c(19,19))
+downsampled900m_2024 <- st_downsample(prodes_2024, c(29,29))
+downsampled1200m_2024 <- st_downsample(prodes_2024, c(39,39))
+downsampled3000m_2024 <- st_downsample(prodes_2024, c(99,99))
+downsampled6000m_2024 <- st_downsample(prodes_2024, c(199,199))
+downsampled9000m_2024 <- st_downsample(prodes_2024, c(299,299))
+downsampled12000m_2024 <- st_downsample(prodes_2024, c(399,399))
+
+ds_2024 <- list(downsampled60m_2024, downsampled90m_2024, downsampled120m_2024, downsampled300m_2024, downsampled600m_2024, downsampled900m_2024, downsampled1200m_2024, downsampled3000m_2024, downsampled6000m_2024, downsampled9000m_2024, downsampled12000m_2024)
+
+path <- getwd()
+save_file <- file.path(path, paste0(deparse(substitute(prodes_2024)), ".tif"))
+
+write_stars(prodes_2024, save_file)
+
+for (i in seq_along(ds_2024)) {
+  write_stars(ds_2024[[i]], file.path(path, paste0("prodes2024_downsampled_", i, ".tif")))
+}
+
+```
+
+The time-series of binary deforestation maps from 2000 to 2024, along with their downsampled by-products are saved.
+
+The next part of the analysis addresses the statistical standard error variances.
