@@ -38,7 +38,9 @@ The datasets used in this study are publicly available but are not included in t
 - INPE PRODES, Accumulated Deforestation.
 For further information regarding the portal, downloading the data from their sources, and the dataset citation, please refer to the [Data.md](Data.md).
 
-After downloading, place the data in the **~/Data** directory.
+After downloading, place the data in the **./Data** directory.
+
+However, the resulting cropped and downsampled maps are also provided in the [Results](Results) directory of the repository.
 
 ## License
 MIT License (see [LICENSE](LICENSE.txt))
