@@ -1,7 +1,7 @@
 ---
 title: "CaseStudy_Imperviousness"
 author: "Yomna Eid"
-date: "2024-12-31"
+date: "2026-03"
 output: html_document
 ---
 
@@ -9,14 +9,16 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Set the working directory, and load the data locally-present from its directory. The dataset is the High Resolution Layer maps for Impervioussness Density provided by the Copernicus Monitoring Service, with a native resolution of 20m.
-```{r}
-setwd("~/Dead Laptop Files/Documents/1b. PhD/2. On-going Publications/1. Downsampling/Analysis Code")
+Check for the correct working directory, and make sure that the data is locally present in the ./Data folder within your directory. The dataset is the High Resolution Layer maps for Impervioussness Density provided by the Copernicus Monitoring Service, with a native resolution of 20m for the years 2006, 2009, 2012, 2015, and 2018.
 
-maps <- list.files(path = r"(C:\Users\yeid\Documents\Dead Laptop Files\Documents\1b. PhD\2. On-going Publications\1. Downsampling\Data\Imperviousness\Results\)", pattern = "\\.tif$", recursive = TRUE,  full.names = TRUE)
+```{r}
+getwd()
+
+maps <- list.files(path = "./Data/Imperviousness", pattern = "\\.tif$", recursive = TRUE,  full.names = TRUE)
 ```
 
-Load the packages needed
+Load the packages:
+
 ```{r}
 library(stars)
 library(rnaturalearth)
@@ -24,14 +26,15 @@ library(rnaturalearthdata)
 library(rnaturalearthhires)
 library(dplyr)
 ```
+
 Define the Na-value, and subset the dataset to our AOI (which is the state of North-Rhine Westphalia in Germany)
+
 ```{r}
 nodata_value <- 250
 imperviousness <- lapply(maps, function(file) {
   read_stars(file, NA_value = nodata_value)
 })
 attr(imperviousness, "NA_value") <- nodata_value
-#map_germany <- ne_countries(type = "countries", country = "Germany", scale = "medium", returnclass = "sf")  |> st_transform(st_crs(imperviousness[[1]]))
 
 NRW <- ne_states(country = "germany") %>% filter(name == "Nordrhein-Westfalen") |> st_transform(st_crs(imperviousness[[1]]))
 
@@ -51,6 +54,7 @@ plot(imperv_2006)
 ```
 
 For the 3-year period of 2008, 2009, 2010
+
 ```{r}
 imperv_2009 <- do.call(st_mosaic, imperviousness[3:4]) %>% st_crop(NRW$geometry) %>% st_apply(c("x", "y"), function(x) {
   ifelse(x > threshold_value, 1, 0)}) %>% setNames("imperviousness_2009")
@@ -68,6 +72,7 @@ attr(imperv_2012, "year") <- 2012
 
 plot(imperv_2012)
 ```
+
 For the 3-year period of 2014, 2015, 2016
 
 ```{r}
@@ -82,19 +87,47 @@ For the 3-year period of 2017, 2018, 2019
 
 ```{r}
 ## Native resolution is 10m
-#imperv_2018 <- do.call(st_mosaic, imperviousness[9:65]) %>% st_crop(NRW$geometry) %>% st_apply(c("x", "y"), function(x) {
-#  ifelse(x > threshold_value, 1, 0)}) #%>%  st_as_stars(downsample = c(1,1))
-
-  imperv_2018 <- do.call(st_mosaic, imperviousness[9:65]) %>% st_crop(NRW$geometry) %>% st_apply(c("x", "y"), function(x) {
+imperv_2018 <- do.call(st_mosaic, imperviousness[9:65]) %>% st_crop(NRW$geometry) %>% st_apply(c("x", "y"), function(x) {
     ifelse(x > threshold_value, 1, 0)}) %>% setNames("imperviousness_2018") #%>%  st_downsample(c(1,1))
-  attr(imperv_2018, "year") <- 2018
+attr(imperv_2018, "year") <- 2018
 
 plot(imperv_2018)
 ```
 
-We now downsample the imperviousness raster map from a 20m native resolution to lower resolutions of 40m, 80m, 100m, 200m, 400m, 800m, 1km, 2km, 4km, 8km, 10km. Then we save the resulting maps.
+Now, downsample the imperviousness raster map from a 20m native resolution to lower resolutions of 40m, 80m, 100m, 200m, 400m, 800m, 1km, 2km, 4km, 8km, 10km. Then we save the resulting maps into the ~/Results directory.
 
 ```{r}
+output_dir <- "Results"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+
+output_dir <- "Imperviousness"
+if (!dir.exists(output_dir)){
+  dir.create(output_dir)
+  cat(sprintf("Directory '%s' created.\n", output_dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", output_dir))
+}
+
+setwd(output_dir)
+```
+```{r}
+this.dir <- "2006"
+if (!dir.exists(this.dir)){
+  dir.create(this.dir)
+  cat(sprintf("Directory '%s' created.\n", this.dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", this.dir))
+}
+
+setwd(this.dir)
+
 downsampled40m_2006 <- st_downsample(imperv_2006, c(1,1))
 downsampled80m_2006 <- st_downsample(imperv_2006, c(3,3))
 downsampled100m_2006 <- st_downsample(imperv_2006, c(4,4))
@@ -122,6 +155,18 @@ for (i in seq_along(ds_2006)) {
 We repeat the same downsampling scehma from 2006, to the maps of 2009.
  
 ```{r}
+setwd(output_dir)
+
+this.dir <- "2009"
+if (!dir.exists(this.dir)){
+  dir.create(this.dir)
+  cat(sprintf("Directory '%s' created.\n", this.dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", this.dir))
+}
+
+setwd(this.dir)
+
 downsampled40m_2009 <- st_downsample(imperv_2009, c(1,1))
 downsampled80m_2009 <- st_downsample(imperv_2009, c(3,3))
 downsampled100m_2009 <- st_downsample(imperv_2009, c(4,4))
@@ -149,6 +194,18 @@ for (i in seq_along(ds_2009)) {
 And again for 2012.
 
 ```{r}
+setwd(output_dir)
+
+this.dir <- "2012"
+if (!dir.exists(this.dir)){
+  dir.create(this.dir)
+  cat(sprintf("Directory '%s' created.\n", this.dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", this.dir))
+}
+
+setwd(this.dir)
+
 downsampled40m_2012 <- st_downsample(imperv_2012, c(1,1))
 downsampled80m_2012 <- st_downsample(imperv_2012, c(3,3))
 downsampled100m_2012 <- st_downsample(imperv_2012, c(4,4))
@@ -176,6 +233,18 @@ for (i in seq_along(ds_2012)) {
 And 2015.
 
 ```{r}
+setwd(output_dir)
+
+this.dir <- "2015"
+if (!dir.exists(this.dir)){
+  dir.create(this.dir)
+  cat(sprintf("Directory '%s' created.\n", this.dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", this.dir))
+}
+
+setwd(this.dir)
+
 downsampled40m_2015 <- st_downsample(imperv_2015, c(1,1))
 downsampled80m_2015 <- st_downsample(imperv_2015, c(3,3))
 downsampled100m_2015 <- st_downsample(imperv_2015, c(4,4))
@@ -203,6 +272,18 @@ for (i in seq_along(ds_2015)) {
 As for 2018, since the native resolution for this map is 10m, instead we first downsample it to the same base resolution of 20m as the previous maps in the time-series. Then we perform the same downsampling schema.
 
 ```{r}
+setwd(output_dir)
+
+this.dir <- "2018"
+if (!dir.exists(this.dir)){
+  dir.create(this.dir)
+  cat(sprintf("Directory '%s' created.\n", this.dir))
+} else {
+  cat(sprintf("Directory '%s' already exists.\n", this.dir))
+}
+
+setwd(this.dir)
+
 downsampled20m_2018 <- st_downsample(imperv_2018, c(1,1))
 downsampled40m_2018 <- st_downsample(downsampled20m_2018, c(1,1))
 downsampled80m_2018 <- st_downsample(downsampled20m_2018, c(3,3))
@@ -221,7 +302,6 @@ ds_2018 <- list(downsampled20m_2018,downsampled40m_2018,downsampled80m_2018,
                 downsampled800m_2018,downsampled1000m_2018,downsampled2000m_2018,
                 downsampled4000m_2018,downsampled8000m_2018,downsampled10000m_2018)
 
-#write_stars(downsampled20m_2018, "impervious2018_20m.tif")
 
 for (i in seq_along(ds_2018)) {
   write_stars(ds_2018[[i]], paste0("impervious2018_downsampled_", i, ".tif"))
