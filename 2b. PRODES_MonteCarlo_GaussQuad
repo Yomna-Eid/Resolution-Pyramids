@@ -1,0 +1,494 @@
+---
+title: "MonteCarlo_GaussQuad"
+author: "Yomna Eid"
+date: "2026-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load packages and check directory:
+
+```{r}
+library(stars)
+library(osmdata)
+library(ggplot2)
+library(gstat)
+
+## check the working directory
+
+#getwd()
+this.dir <- "./Results/Deforestation"
+setwd(this.dir)
+```  
+
+Load the data (and reiterate the calculation for every r (Raster image for every year in the time-series at native resolution)):
+
+```{r}
+r <- read_stars("./2002/prodes2002_30m.tif", na.rm = TRUE) |> setNames("PRODES2002") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2004/prodes2004_30m.tif", na.rm = TRUE) |> setNames("PRODES2004") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2006/prodes2006_30m.tif", na.rm = TRUE) |> setNames("PRODES2006") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2008/prodes2008_30m.tif", na.rm = TRUE) |> setNames("PRODES2008") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2010/prodes2010_30m.tif", na.rm = TRUE) |> setNames("PRODES2010") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2012/prodes2012_30m.tif", na.rm = TRUE) |> setNames("PRODES2012") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2014/prodes2014_30m.tif", na.rm = TRUE) |> setNames("PRODES2014") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2016/prodes2016_30m.tif", na.rm = TRUE) |> setNames("PRODES2016") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2018/prodes2018_30m.tif", na.rm = TRUE) |> setNames("PRODES2018") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2020/prodes2020_30m.tif", na.rm = TRUE) |> setNames("PRODES2020") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2022/prodes2022_30m.tif", na.rm = TRUE) |> setNames("PRODES2022") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2024/prodes2024_30m.tif", na.rm = TRUE) |> setNames("PRODES2024") %>% st_as_stars() %>% na.omit()
+```
+
+Get the administrative boundaries of Minaçu bounding-box, then plot:
+
+```{r}
+p <- st_as_sfc(st_bbox(r)) %>% st_make_valid()
+
+ggplot() +
+  geom_tile(data = na.omit(as.data.frame(r, xy = TRUE)), aes(x = x, y = y, fill = names(r))) +   # Raster
+  scale_fill_viridis_c() +
+  geom_sf(data = p, fill = NA, color = "black", size = 2) +   # Polygon overlay
+  theme_minimal() +
+  ggtitle("Deforestation Map of Minaçu")
+```
+
+Compute the variance of the raster image:
+
+```{r}
+(v = var(as.vector(r[[1]]), na.rm = TRUE))
+```
+
+The different grid sizes:
+
+```{r}
+gridsizes = c(30, 60, 90, 120, 300, 600, 900, 1200, 3000, 6000, 9000, 12000)
+thinning = gridsizes / 10
+```
+
+Compute the standard errors associated with the different grid sizes, for random sampling:
+
+```{r}
+(n = prod(dim(r)) / (thinning^2))
+(se.random_sampling = sqrt(v/n))
+names(se.random_sampling) = gridsizes
+se.random_sampling
+```
+
+Now do this for regular sampling, using Ripley 1981:
+
+```{r}
+set.seed(1353)
+pts = st_sample(p, 14000)
+r.sample = st_extract(r, pts) %>% na.omit()
+dist = gridsizes
+
+v = variogram(names(r)~1, r.sample, boundaries = dist)
+plot(v)
+m = "Exp"
+v0 = vgm(0.03, m, 2)
+(v.model = fit.variogram(v, vgm(0.4, m, 33000, add.to = v0), fit.method = 7))
+plot(v, v.model)
+
+```
+
+To test the implemetation of the methods, we use a pure nugget effect variogram model:
+
+```{r}
+#set.seed(123)
+#pts <- cbind(runif(100), runif(100)) %>% st_multipoint() %>% st_sfc()
+#data <- rnorm(100)
+# sample_data  <- st_sf(coords = pts, x = data)
+# 
+# v <- variogram(x ~ 1, sample_data)
+# plot(v)
+# nugget_model <- vgm(psill = 1, model = "Nug", range = 0, nugget = 1)
+# v.model <- fit.variogram(v, model = nugget_model)
+# v.model
+# plot(v, v.model, main = "Variogram with Pure Nugget Effect")
+```
+
+1. MONTE-CARLO INTEGRATION
+
+Compute the mean block-block covariance function value, using random sampling (Monte-Carlo integration):
+
+```{r}
+n = 1e4
+make_unif_pts = function(bbox, n) {
+	x = runif(n, bbox["xmin"], bbox["xmax"])
+	y = runif(n, bbox["ymin"], bbox["ymax"])
+	as.matrix(cbind(x = x, y = y))
+}
+
+mean_cov = function(x, y, model) {
+	d = if (missing(y))
+			as.vector(as.matrix(dist(x)))
+		else {
+			all = rbind(x, y)
+			n1 = nrow(x)
+			n2 = nrow(y)
+			as.vector(as.matrix(dist(all))[(n1+1):(n1+n2),1:n1])
+		}
+	cov <- variogramLine(model, covariance = TRUE, dist_vector = d, n)$gamma
+	mean(cov)
+}
+
+x = make_unif_pts(st_bbox(r), n)
+y = make_unif_pts(st_bbox(r), n)
+(C_mean = mean_cov(x, y, v.model))
+#(C_mean = mean_cov(x, y, v.model2))
+
+```
+
+Create a function that computes the SE using Ripley's 1981 eq. 3.4 (page 23), and use it:
+
+```{r}
+make_grid = function(size, bbox, n = Inf) {
+	x = seq(bbox["xmin"], bbox["xmax"], size)
+	y = seq(bbox["ymin"], bbox["ymax"], size)
+	grd = as.matrix(expand.grid(x = x, y = y))
+	if (n < nrow(grd))
+		grd = grd[sample(nrow(grd), n), ]
+	grd
+}
+
+compute_se = function(size, model, maxpts = 1e3, C_mean) {
+	grd = make_grid(size, st_bbox(r), maxpts)
+	pts = make_unif_pts(st_bbox(r), maxpts)
+	# eq 3.4, RHS part:
+	var = mean_cov(grd, model = v.model) -
+		2 * mean_cov(grd, pts, v.model) + C_mean
+	sqrt(var)
+}
+
+sel = TRUE
+se_mc = sapply(gridsizes[sel], compute_se, model = v.model, C_mean = C_mean)
+names(se_mc) = gridsizes[sel]
+se_mc
+se.random_sampling 
+```
+
+2. GAUSS-QUADRATURE
+
+Now compute the mean covariance function value, using deterministic (rather than stochastic) method of Gauss Quadrature, using systematic/symmetric sampling. First, define the Gaussian points and weights for integral limits of [-1,1], as follows:
+
+```{r}
+# Define Gaussian quadrature points and weights
+# Reference: V. I. Krylov (Author), Arthur H. Stroud (Translator), "Approximate Calculation of Integrals"
+
+gauss_pts <- function(n) {
+  if (n == 4) {
+gauss <- c(-0.8611363116, -0.3399810436, 0.3399810436, 0.8611363116)
+gauss_w <- c(0.3478548452, 0.6521451548, 0.6521451548, 0.3478548452)
+  return(c(gauss, gauss_w))
+  } else if (n == 6) {
+gauss <- c(-0.9324695142, -0.6612093864, -0.2386191860, 0.2386191860, 0.6612093864, 0.9324695142)
+gauss_w <- c(0.1713244924, 0.3607615730, 0.4679139346, 0.4679139346, 0.3607615730, 0.1713244924)
+  return(c(gauss, gauss_w))
+  } else if (n == 8) {
+gauss <- c(-0.96028985649753623168, -0.79666647741362673959, -0.52553240991632898582, -0.18343464249564980494, 0.18343464249564980494, 0.52553240991632898582, 0.79666647741362673959, 0.96028985649753623168)
+gauss_w <- c(0.10122853629037625915, 0.22238103445337447054, 0.31370664587788728734, 0.36268378337836198297, 0.36268378337836198297, 0.31370664587788728734, 0.22238103445337447054, 0.10122853629037625915)
+  return(c(gauss, gauss_w))
+  } else if (n == 10) {
+gauss <- c(-0.97390652851717172008, -0.86506336668898451073, -0.67940956829902440623, -0.43339539412924719080, -0.14887433898163121089, 0.14887433898163121089, 0.43339539412924719080, 0.67940956829902440623, 0.86506336668898451073, 0.97390652851717172008)
+gauss_w <- c(0.06667134430868813759, 0.14945134915058059315, 0.21908636251598204400, 0.26926671930999635509, 0.29552422471475287017, 0.29552422471475287017, 0.26926671930999635509, 0.21908636251598204400, 0.14945134915058059315, 0.06667134430868813759)
+  return(c(gauss, gauss_w))
+  } else if (n == 20){
+gauss <- c(-0.99312859918509492479, -0.96397192727791379127, -0.91223442825132590587, -0.83911697182221882339, -0.74633190646015079261, -0.63605368072651502545, -0.51086700195082709800, -0.37370608871541956067, -0.22778585114164507808, -0.07652652113349733375, 0.07652652113349733375, 0.22778585114164507808, 0.37370608871541956067, 0.51086700195082709800, 0.63605368072651502545, 0.74633190646015079261, 0.83911697182221882339, 0.91223442825132590587, 0.96397192727791379127, 0.99312859918509492479)
+gauss_w <- c(0.01761400713915211831, 0.04060142980038694133, 0.06267204833410906357, 0.08327674157670474873, 0.10193011981724043504, 0.11819453196151841731, 0.13168863844917662690, 0.14209610931838205133, 0.14917298647260374679, 0.15275338713072585070, 0.15275338713072585070, 0.14917298647260374679, 0.14209610931838205133, 0.13168863844917662690, 0.11819453196151841731, 0.10193011981724043504, 0.08327674157670474873, 0.06267204833410906357, 0.04060142980038694133, 0.01761400713915211831)
+  return(c(gauss, gauss_w))
+  } else if (n == 24){
+gauss <- c(-0.99518721999702136018, -0.97472855597130949820, -0.93827455200273275852, -0.88641552700440103421, -0.82000198597390292195, -0.74012419157855436424, -0.64809365193697556925, -0.54542147138883953566,  -0.43379350762604513849, -0.31504267969616337439, -0.19111886747361630916, -0.06405689286260562609, 0.06405689286260562609, 0.19111886747361630916, 0.31504267969616337439, 0.43379350762604513849, 0.54542147138883953566, 0.64809365193697556925, 0.74012419157855436424, 0.82000198597390292195, 0.88641552700440103421, 0.93827455200273275852, 0.97472855597130949820, 0.99518721999702136018)
+gauss_w <- c(0.01234122979998719955, 0.02853138862893366318, 0.04427743881741980617, 0.05929858491543678075, 0.07334648141108030573, 0.08619016153195327592, 0.09761865210411388827, 0.10744427011596563478, 0.11550566805372560135, 0.12167047292780339120, 0.12583745634682829612, 0.12793819534675215697, 0.12793819534675215697, 0.12583745634682829612, 0.12167047292780339120,  0.11550566805372560135, 0.10744427011596563478, 0.09761865210411388827, 0.08619016153195327592, 0.07334648141108030573, 0.05929858491543678075, 0.04427743881741980617, 0.02853138862893366318, 0.01234122979998719955)
+  return(c(gauss, gauss_w))
+  } else if (n == 32){
+gauss <- c(-0.99726386184948156354, -0.98561151154526833540, -0.96476225558750643077, -0.93490607593773968917, -0.89632115576605212397, -0.84936761373256997013, -0.79448379596794240696, -0.73218211874028968039, -0.66304426693021520098, -0.58771575724076232904,  -0.50689990893222939002, -0.42135127613063534536, -0.33186860228212764978, -0.23928736225213707454, -0.14447196158279649349, -0.04830766568773831623, 0.04830766568773831623, 0.14447196158279649349, 0.23928736225213707454, 0.33186860228212764978, 0.42135127613063534536, 0.50689990893222939002, 0.58771575724076232904, 0.66304426693021520098, 0.73218211874028968039, 0.79448379596794240696, 0.84936761373256997013, 0.89632115576605212397, 0.93490607593773968917, 0.96476225558750643077, 0.98561151154526833540, 0.99726386184948156354)
+gauss_w <- c(0.00701861000947009660, 0.01627439473090567061, 0.02539206530926205945, 0.03427386291302143310, 0.04283589802222668066, 0.05099805926237617620, 0.05868409347853554714, 0.06582222277636184684, 0.07234579410884850623, 0.07819389578707030647, 0.08331192422694675522, 0.08765209300440381114, 0.09117387869576388471, 0.09384439908080456564, 0.09563872007927485942, 0.09654008851472780057, 0.09654008851472780057, 0.09563872007927485942, 0.09384439908080456564, 0.09117387869576388471, 0.08765209300440381114, 0.08331192422694675522, 0.07819389578707030647, 0.07234579410884850623, 0.06582222277636184684, 0.05868409347853554714, 0.05099805926237617620, 0.04283589802222668066, 0.03427386291302143310, 0.02539206530926205945, 0.01627439473090567061, 0.00701861000947009660)
+  return(c(gauss, gauss_w))
+  } else if (n == 40) {
+gauss <- c(-.99823770971055920035, -0.99072623869945700645, -0.97725994998377426266, -0.95791681921379165580, -0.93281280827867653336, -0.90209880696887429673, -0.86595950321225950382, -0.82461223083331166320, -0.77830565142651938769, -0.72731825518992710328, -0.67195668461417954838, -0.61255388966798023795, -0.54946712509512820208, -0.48307580168617871291, -0.41377920437160500152, -0.34199409082575847301, -0.26815218500725368114, -0.19269758070137109972, -0.11608407067525520848, -0.03877241750605082193, 0.03877241750605082193, 0.11608407067525520848, 0.19269758070137109972, 0.26815218500725368114, 0.34199409082575847301, 0.41377920437160500152, 0.48307580168617871291, 0.54946712509512820208, 0.61255388966798023795, 0.67195668461417954838, 0.72731825518992710328, 0.77830565142651938769, 0.82461223083331166320, 0.86595950321225950382, 0.90209880696887429673, 0.93281280827867653336, 0.95791681921379165580, 0.97725994998377426266, 0.99072623869945700645, 0.99823770971055920035)
+gauss_w <- c(0.00452127709853319126, 0.01049828453115281362, 0.01642105838190788871, 0.02224584919416695726, 0.02793700698002340110, 0.03346019528254784739, 0.03878216797447201764, 0.04387090818567327199, 0.04869580763507223206, 0.05322784698393682436, 0.05743976909939155137, 0.06130624249292893917, 0.06480401345660103807, 0.06791204581523390383, 0.07061164739128677970, 0.07288658239580405906, 0.07472316905796826420, 0.07611036190062624237, 0.07703981816424796559, 0.07750594797842481126, 0.07750594797842481126, 0.07703981816424796559, 0.07611036190062624237, 0.07472316905796826420, 0.07288658239580405906, 0.07061164739128677970, 0.06791204581523390383, 0.06480401345660103807, 0.06130624249292893917, 0.05743976909939155137, 0.05322784698393682436, 0.04869580763507223206, 0.04387090818567327199, 0.03878216797447201764, 0.03346019528254784739, 0.02793700698002340110, 0.02224584919416695726, 0.01642105838190788871, 0.01049828453115281362, 0.00452127709853319126)
+  return(c(gauss, gauss_w))
+  }}
+```
+
+Now we compute the mean block-block covariance value using Gauss Quadrature for a our raster image (i.e. 2-dimensional grid):
+
+```{r}
+# Define the covariance function for a cumulative nugget effect
+cov_func <- function(x2, y2, x1, y1) {
+  # Compute h as the Euclidean distance
+  h <- sqrt((x1 - x2)**2 + (y1 - y2)**2)
+   # Calculate the covariance: equals nugget_sill when h = 0, otherwise 0
+  if (h < 1e-8) {
+       return(0) # Assuming this is the nugget effect variance
+     } else {
+       return(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma)
+       }
+#return(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma)
+
+## Covariance function based on h (equivalent to above but without using gstat package function)
+  #term1 <- v.model$psill[1] * (exp(-h/v.model$range[1]))
+  #term2 <- v.model$psill[2] * (exp(-h/v.model$range[2]))
+  #return(term1 + term2) 
+  #    }
+}
+
+# Function to perform Gaussian quadrature in 2D
+# Where n is the no. of Gaussian points, and r is the raster image
+gaussian_quadrature_2d <- function(n, cov_func, r) {
+
+  # Extract integration limits
+  bbox <- st_bbox(r)
+  x_min <- bbox["xmin"]
+  x_max <- bbox["xmax"]
+  y_min <- bbox["ymin"]
+  y_max <- bbox["ymax"]
+  
+  # Transform quadrature points and weights to the integration domain
+  transform_x <- function(xi) {
+    0.5 * (x_max - x_min) * xi + 0.5 * (x_max + x_min)
+  }
+  transform_y <- function(yi) {
+    0.5 * (y_max - y_min) * yi + 0.5 * (y_max + y_min)
+  }
+  transform_wx <- function(weight){
+    0.5 * (x_max - x_min) * weight
+  }
+  transform_wy <- function(weight){
+    0.5 * (y_max - y_min) * weight
+  }
+  
+  # Initialize integral value, gauss points and weights
+  integral_value <- 0
+  gauss <- gauss_pts(n)[1:n]
+  print(gauss)
+  gauss_w <- gauss_pts(n)[(n+1):(n+n)]
+  print(gauss_w)
+  
+  # Perform double summation over Gaussian quadrature points
+  for (i in seq_along(gauss)) {
+    for (j in seq_along(gauss)) {
+      # Map quadrature points to the integration domain
+      x1 <- transform_x(gauss[i])
+      y1 <- transform_y(gauss[j])
+      gauss_wx1 <- transform_wx(gauss_w[i])
+      gauss_wy1 <- transform_wy(gauss_w[j])
+      
+      first_integral <- 0
+      for (k in seq_along(gauss)) {
+        for (l in seq_along(gauss)) {
+      # Map quadrature points to the integration domain
+      x2 <- transform_x(gauss[k])
+      y2 <- transform_y(gauss[l])
+      gauss_wx2 <- transform_wx(gauss_w[k])
+      gauss_wy2 <- transform_wy(gauss_w[l])
+      
+      # Evaluate the covariance function using h
+      cov_val <- cov_func(x2, y2, x1, y1)
+      first_integral <- first_integral + gauss_wx2 * gauss_wy2 * cov_val
+      #print(paste("first_integral:", first_integral))
+      #print(paste("x2:", x2, "y2:", y2, "x1:", x1, "y1:", y1, "cov_val:", cov_val, "integral_value:", integral_value))
+        }
+        }
+      integral_value <- integral_value + first_integral * gauss_wx1 * gauss_wy1 
+      }
+    }
+  # Scale by the area of the block
+  area <- (x_max - x_min) * (y_max - y_min)
+  integral_value <- integral_value / area**2
+  return(integral_value)
+}
+
+# Compute the integral
+# Available Gauss points are n = 4, 6, 8, 10, 20, 24, 32, 40
+bb_cov <- gaussian_quadrature_2d(40, cov_func, r)
+
+
+# Print the result
+cat("The integral of the covariance function over the domain is:", bb_cov, "\n")
+```
+
+Now compute the mean block-sample covariance value using Gauss Quadrature for the raster image (i.e. 2-dimensional grid):
+
+```{r}
+# Define the covariance function for a cumulative nugget effect
+cov_func <- function(x0, y0, x1, y1) {
+  # Compute h as the Euclidean distance
+  h <- sqrt((x1 - x0)**2 + (y1 - y0)**2)
+  # Calculate the covariance: equals nugget_sill when h = 0, otherwise 0
+  #if (h < 1e-8) {
+    return(0) # Assuming this is the nugget effect variance (i.e. no nugget effect)
+  } else {
+  return(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma)
+  }
+
+# Function to perform Gaussian quadrature in 2D
+gaussian_quadrature_2d <- function(n, cov_func, r, grid_size) {
+
+  # Extract integration limits
+  bbox <- st_bbox(r)
+  x_min <- bbox["xmin"]
+  x_max <- bbox["xmax"]
+  y_min <- bbox["ymin"]
+  y_max <- bbox["ymax"]
+  
+  
+  # Transform quadrature points to the integration domain
+  transform_x <- function(xi) {
+    0.5 * (x_max - x_min) * xi + 0.5 * (x_max + x_min)
+  }
+  transform_y <- function(yi) {
+    0.5 * (y_max - y_min) * yi + 0.5 * (y_max + y_min)
+  }
+   transform_wx <- function(weight){
+    0.5 * (x_max - x_min) * weight
+  }
+  transform_wy <- function(weight){
+    0.5 * (y_max - y_min) * weight
+  }
+  
+  # Initialize integral value, x0 & y0, gauss points and weights
+  integral_value <- 0
+  grd = make_grid(grid_size, bbox, 1e4)
+  x0 <- grd[,1]
+  y0 <- grd[,2]
+  gauss <- gauss_pts(n)[1:n]
+  print(gauss)
+  gauss_w <- gauss_pts(n)[(n+1):(n+n)]
+  print(gauss_w)
+  
+  # Perform double summation over Gaussian quadrature points
+  for (i in seq_along(gauss)) {
+    for (j in seq_along(gauss)) {
+      # Map quadrature points to the integration domain
+      x1 <- transform_x(gauss[i])  # First point in x
+      y1 <- transform_y(gauss[j])  # First point in y
+      gauss_wx <- transform_wx(gauss_w[i])
+      gauss_wy <- transform_wy(gauss_w[j])
+      # Evaluate the covariance function using h
+      cov_val <- cov_func(x0, y0, x1, y1)
+      integral_value <- integral_value +  gauss_wx * gauss_wy * cov_val
+      #print(paste("x0:", x0, "y0:", y0, "x1:", x1, "y1:", y1, "cov_val:", cov_val, "integral_value:", integral_value))
+        }
+      }
+  # Scale by the area of the block
+  area <- (x_max - x_min) * (y_max - y_min)
+  integral_value <- integral_value / area
+  return(integral_value)
+}
+
+compute_for_gridsizes <- function(gridsizes, cov_func, r) {
+  results <- vector("list", length(gridsizes))
+  names(results) <- as.character(gridsizes)
+  
+  for (i in seq_along(gridsizes)) {
+    grid_size <- gridsizes[i]
+    cat("Computing for grid size:", grid_size, "\n")
+    result <- mean(gaussian_quadrature_2d(40, cov_func, r, grid_size))
+    results[[i]] <- result
+  }
+  return(results)
+}
+
+# Compute the integral
+bs_cov <- compute_for_gridsizes(gridsizes, cov_func, r)
+print(bs_cov)
+
+# Print the result
+#cat("The integral of the covariance function over the domain is:", bs_cov, "\n")
+```
+
+Point-Point covariance:
+
+```{r}
+# grd = make_grid(gridsizes[[1]], st_bbox(r), 1e4)
+# h <- as.vector(as.matrix(dist(grd)))
+# (pp_cov <- mean(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma))
+
+compute_for_gridsizes <- function(gridsizes, bbox, v.model) {
+  results <- vector("list", length(gridsizes))
+  names(results) <- as.character(gridsizes)
+  
+  for (i in seq_along(gridsizes)) {
+    grid_size <- gridsizes[i]
+    cat("Computing for grid size:", grid_size, "\n")
+    
+    grd <- make_grid(grid_size, bbox, 1e3)
+    h <- as.vector(as.matrix(dist(grd)))
+    pp_cov <- mean(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma)
+    results[[i]] <- pp_cov
+  }
+  
+  return(results)
+}
+
+pp_cov <- compute_for_gridsizes(gridsizes, st_bbox(r), v.model)
+
+# Print all results
+print(pp_cov)
+```
+
+Now compute the SE using Ripley's 1981 eq. 3.4 (page 23) with Gauss-Quadrature:
+
+```{r}
+se_gq <- NULL
+var <- NULL
+
+for (i in 1:length(pp_cov)){
+  var[i] <- pp_cov[[i]] - 2*bs_cov[[i]] + bb_cov
+  se_gq[i] <- sqrt(var[i])
+}
+names(se_gq) <- gridsizes
+se_gq
+```
+
+End of analysis
+
+Save:
+```{r}
+rm(r) # redunant saving of r raster-stack
+
+save.image(paste0(names(r), "_sampling.rda"))
+```
+
+
+```{r}
+## Convergence graph of Monte Carlo estimates vs. Gauss Quadrature estimates
+
+# Number of Monte Carlo samples
+n <- 1e4
+
+# Generate points
+x_mc <- make_unif_pts(st_bbox(r), n)
+y_mc <- make_unif_pts(st_bbox(r), n)
+
+# Monte Carlo block-block covariance
+C_mc <- mean_cov(x_mc, y_mc, v.model)
+cat("Monte Carlo Estimate:", C_mc, "\n")
+
+# Gaussian Quadrature block-block covariance
+C_gq <- gaussian_quadrature_2d(cov_func, r)
+cat("Gaussian Quadrature Estimate:", C_gq, "\n")
+
+sample_sizes <- seq(500, 10000, by = 500)
+mc_vals <- numeric(length(sample_sizes))
+
+for (i in seq_along(sample_sizes)) {
+  n <- sample_sizes[i]
+  x_tmp <- make_unif_pts(st_bbox(r), n)
+  y_tmp <- make_unif_pts(st_bbox(r), n)
+  mc_vals[i] <- mean_cov(x_tmp, y_tmp, v.model)
+}
+
+# Plot convergence
+plot(sample_sizes, mc_vals, type = "b", col = "blue", pch = 19,
+     xlab = "Number of Samples (n)",
+     ylab = "Monte Carlo Estimate of Covariance",
+     main = "Convergence of Monte Carlo Estimate")
+abline(h = C_gq, col = "red", lty = 2)
+legend("topright", legend = c("Monte Carlo", "Gaussian Quadrature"),
+       col = c("blue", "red"), lty = c(1, 2), pch = c(19, NA))
+
+```
