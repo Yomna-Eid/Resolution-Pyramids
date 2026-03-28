@@ -49,6 +49,42 @@ The repository provides the full workflow for:
 The code is written in R and relies on standard geospatial and numerical libraries.
 
 ## Repository Structure
+```
+├── Data/                      # (empty) Placeholder for input datasets
+├── Results/                   # Generated downsampled raster files (outputs of scripts 1a. & 2a.)
+│   ├── Imperviousness/        # Downsampled raster files for the HRL Imperviousness binary 
+│   │   ├── 2006/                classification maps (output of script 1a.)
+│   │   ├── 2009/
+│   │   ├── 2012/
+│   │   ├── 2015/
+│   │   └── 2019/
+│   ├── Deforestation/         # Downsampled raster files for the PRODES Yearly Deforesation
+│   ├── ├── 2002/                binary classification maps (outout of script 2a.)
+│   ├── ├── 2004/
+│   ├── ├── 2006/
+│   ├── ├── 2008/
+│   ├── ├── 2010/
+│   ├── ├── 2012/
+│   ├── ├── 2014/
+│   ├── ├── 2016/
+│   ├── ├── 2018/
+│   ├── ├── 2020/
+│   ├── ├── 2022/
+│   └── └── 2024/
+├── 1a. CaseStudy_Imperviousness.Rmd            # Pre-processing of the data to create 
+│                                                 downsampled raster HRL-IMP maps
+├── 1b. MonteCarlo_GaussQuad.Rmd                # Calculation of the SE of mean using the 
+│                                                 two numerical methods for the IMP case study
+├── 1c. CaseStudy_Imperviousness_Results.Rmd    # Producing the results + figures used in the paper
+├── 2a. CaseStudy_Deforestation.Rmd             # Pre-processing of the data to create 
+│                                                 downsampled raster PRODES deforestation maps
+├── 2b. PRODES_MonteCarlo_GaussQuad.Rmd         # Calculation of the SE of mean using the 
+│                                                 two numerical methods for PRODES case study
+├── 2c. CaseStudy_Deforestation_Results.RmD     # Producing the results + figures used in the paper
+├── Data.md                    # Details about the data and citations
+├── LICENSE.txt                
+└── README.md                 
+```
 
 ## Data
 The datasets used in this study are publicly available Earth Observation products but are not included in this repository due to their size (~GB scale) and licensing restritions.
