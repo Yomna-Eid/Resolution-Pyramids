@@ -29,24 +29,48 @@ https://doi.org/10.5194/egusphere-egu25-19140, 2025.
 
 
 ## Overview
+This repository contains the code used to quantify the standard error of spatial means _(uncertainty)_ of target spatially aggregated classes derived from Earth Observation (EO) classification products. The study evaluates how downsampling spatial resolution affects the accuracy of aggregated class estimates using a model-based variance estimator following Ripley (1981)[^1].
+
+Two numerical integration approaches are implemented to approximate the covariance terms required for the variance calculation:
+- Monte Carlo integration (stochastic sampling)
+- Gauss Quadrature (deterministic sampling)
+
+The methodology is demonstrated using two case studies:
+1. Impervious surface density mapping (Copernicus HRL Imperviousness Density)
+2. Deforestation area monitoring (PRODES dataset, INPE - Brazil)
+
+The repository provides the full workflow for:
+- preprocessing the EO datasets
+- downsampling schemes
+- fitting variogram models
+- computing covariance-based standard errors
+- reproducing figures and results presented in the paper
+
+The code is written in R and relies on standard geospatial and numerical libraries.
 
 ## Repository Structure
 
 ## Data
-The datasets used in this study are publicly available but are not included in this repository due to their size and licensing restrictions. They were acquired from the following services:
+The datasets used in this study are publicly available Earth Observation products but are not included in this repository due to their size (~GB scale) and licensing restritions.
+
+The datasets used in this study are publicly available but are not included in this repository due to their size and licensing restrictions. They were acquired from the following official services:
+
 - Copernicus Land Monitoring Service, HRL Imperviousness.
-- INPE PRODES, Accumulated Deforestation.
+- INPE PRODES, Yearly Deforestation.
+
 For further information regarding the portal, downloading the data from their sources, and the dataset citation, please refer to the [Data.md](Data.md).
 
-After downloading the data, create and place it in the `./Data` directory.
+After downloading, place the data in the [`./Data`](Data) directory.
 
-Alternatively, the resulting cropped and downsampled raster files are also provided in the [Results](Results) directory of the repository.
+Alternatively, the resulting cropped and downsampled raster files are also provided in the [`./Results`](Results) directory of the repository.
 
 ## License
-MIT License (see [LICENSE](LICENSE.txt))
+This repository is released under the MIT License (see [LICENSE](LICENSE.txt)).
+
+Note that the datasets used in this study are subject to their respective licenses and terms of use. Users are responsible for complying with the licensing conditions of the original data providers.
 
 ## Citation
-If you use this code, please cite the repository:
+If you use this code or methodology in your work, please cite the repository:
 
 ```md
 @misc{YomnaEid2026Downsampling,
