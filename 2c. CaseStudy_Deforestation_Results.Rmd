@@ -1,0 +1,407 @@
+---
+title: "Results Figures"
+author: "Yomna Eid"
+date: "2026-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load packages and check for the correct working directory, and make sure that the data is locally present in the ./Data, and the results in the ./Results folder within your directory. 
+
+```{r}
+library(stars)
+library(osmdata)
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+
+getwd()
+# or
+#setwd("./Results/Deforestation")
+```
+
+Sort the downsampled raster files into lists based on their resolution:
+
+```{r}
+def30m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_30m.tif$", recursive = TRUE,  full.names = TRUE)
+def60m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_60m.tif$", recursive = TRUE,  full.names = TRUE)
+def90m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_90m.tif$", recursive = TRUE,  full.names = TRUE)
+def120m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_120m.tif$", recursive = TRUE,  full.names = TRUE)
+def300m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_300m.tif$", recursive = TRUE,  full.names = TRUE)
+def600m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_600m.tif$", recursive = TRUE,  full.names = TRUE)
+def900m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_900m.tif$", recursive = TRUE,  full.names = TRUE)
+def1200m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_1200m.tif$", recursive = TRUE,  full.names = TRUE)
+def3000m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_3000m.tif$", recursive = TRUE,  full.names = TRUE)
+def6000m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_6000m.tif$", recursive = TRUE,  full.names = TRUE)
+def9000m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_9000m.tif$", recursive = TRUE,  full.names = TRUE)
+def12000m_files <- list.files(path = "./Results/Deforestation", pattern = "\\_12000m.tif$", recursive = TRUE,  full.names = TRUE)
+```
+
+Load the standard error values computed in the previous step for the time-series:
+
+```{r}
+load("./Results/Deforestation/PRODES2002_sampling.rda")
+se_mc_df_2002 <- se_mc 
+se_gq_df_2002 <- se_gq
+load("./Results/Deforestation/PRODES2004_sampling.rda")
+se_mc_df_2004 <- se_mc 
+se_gq_df_2004 <- se_gq
+load("./Results/Deforestation/PRODES2006_sampling.rda")
+se_mc_df_2006 <- se_mc 
+se_gq_df_2006 <- se_gq
+load("./Results/Deforestation/PRODES2008_sampling.rda")
+se_mc_df_2008 <- se_mc 
+se_gq_df_2008 <- se_gq
+load("./Results/Deforestation/PRODES2010_sampling.rda")
+se_mc_df_2010 <- se_mc 
+se_gq_df_2010 <- se_gq
+load("./Results/Deforestation/PRODES2012_sampling.rda")
+se_mc_df_2012 <- se_mc 
+se_gq_df_2012 <- se_gq
+load("./Results/Deforestation/PRODES2014_sampling.rda")
+se_mc_df_2014 <- se_mc 
+se_gq_df_2014 <- se_gq
+load("./Results/Deforestation/PRODES2016_sampling.rda")
+se_mc_df_2016 <- se_mc 
+se_gq_df_2016 <- se_gq
+load("./Results/Deforestation/PRODES2018_sampling.rda")
+se_mc_df_2018 <- se_mc 
+se_gq_df_2018 <- se_gq
+load("./Results/Deforestation/PRODES2020_sampling.rda")
+se_mc_df_2020 <- se_mc 
+se_gq_df_2020 <- se_gq
+load("./Results/Deforestation/PRODES2022_sampling.rda")
+se_mc_df_2022 <- se_mc 
+se_gq_df_2022 <- se_gq
+load("./Results/Deforestation/PRODES2024_sampling.rda")
+se_mc_df_2024 <- se_mc 
+se_gq_df_2024 <- se_gq
+
+cs <- c("30","60", "90", "120", "300", "600", "900", "1200", "3000", "6000", "9000", "12000")
+```
+
+Load and read the raster files for the 30m native resolution, then label them for each time-stamp year of the time-series:
+
+```{r}
+prodes_30m = lapply(def30m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+for (i in 1:length(def30m_files)){
+  prodes_30m[[i]][is.na(prodes_30m[[i]])] <- 0
+}
+
+def_fraction_30m = lapply(prodes_30m, function(object) mean(object$values))
+
+year = c(2002, 2004, 2006, 2008, 2010, 2012, 2014, 2016, 2018, 2020, 2022, 2024)
+names(def_fraction_30m) <- year
+def_fraction_30m
+
+## Plot to check
+# ggplot() +
+#   #geom_sf(data = t, fill = NA, color = "red") +
+#   geom_sf(data = p, fill = "lightgreen", color = "darkgreen") +
+#   #geom_sf(data = def_40m[[5]], fill = "red", alpha = 0.5, color = "red", size = 1) +
+#   geom_tile(data = na.omit(as.data.frame(prodes_30m[[5]]), xy = TRUE), aes(x = x, y = y, fill = values)) +   # Raster
+#   geom_tile(data = na.omit(as.data.frame(prodes_30m[[4]]), xy = TRUE), aes(x = x, y = y, fill = values)) +   # Raster
+#   theme_minimal() +
+#   ggtitle("PRODES Deforestation Polygon Overlaid on Brazil - Year 2002")
+```
+
+Repeat for the 60m resolution:
+
+```{r}
+prodes_60m = lapply(def60m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+
+for (i in 1:length(prodes_60m)){
+  prodes_60m[[i]][is.na(prodes_60m[[i]])] <- 0
+}
+
+# Calculate the Non-Forest fraction
+def_fraction_60m = lapply(prodes_60m, function(object) mean(object$values))
+
+names(def_fraction_60m) <- year
+def_fraction_60m
+```
+
+Repeat for the 90m resolution:
+
+```{r}
+prodes_90m = lapply(def90m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+
+for (i in 1:length(prodes_90m)){
+  prodes_90m[[i]][is.na(prodes_90m[[i]])] <- 0
+}
+
+def_fraction_90m = lapply(prodes_90m, function(object) mean(object$values))
+
+names(def_fraction_90m) <- year
+def_fraction_90m
+```
+
+Repeat for the 120m resolution:
+
+```{r}
+prodes_120m = lapply(def120m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+
+for (i in 1:length(prodes_120m)){
+  prodes_120m[[i]][is.na(prodes_120m[[i]])] <- 0
+}
+
+def_fraction_120m = lapply(prodes_120m, function(object) mean(object$values))
+
+names(def_fraction_120m) <- year
+def_fraction_120m
+```
+
+Repeat for the 300m resolution:
+
+```{r}
+prodes_300m = lapply(def300m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  setNames("values")})
+
+for (i in 1:length(prodes_300m)){
+  prodes_300m[[i]][is.na(prodes_300m[[i]])] <- 0
+}
+
+def_fraction_300m = lapply(prodes_300m, function(object) mean(object$values))
+
+names(def_fraction_300m) <- year
+def_fraction_300m
+```
+
+Repeat for the 600m resolution:
+
+```{r}
+prodes_600m = lapply(def600m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+
+for (i in 1:length(prodes_600m)){
+  prodes_600m[[i]][is.na(prodes_600m[[i]])] <- 0
+}
+
+def_fraction_600m = lapply(prodes_600m, function(object) mean(object$values))
+
+names(def_fraction_600m) <- year
+def_fraction_600m
+```
+
+Repeat for the 900m resolution:
+
+```{r}
+prodes_900m = lapply(def900m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+
+for (i in 1:length(prodes_900m)){
+  prodes_900m[[i]][is.na(prodes_900m[[i]])] <- 0
+}
+
+def_fraction_900m = lapply(prodes_900m, function(object) mean(object$values))
+
+names(def_fraction_900m) <- year
+def_fraction_900m
+```
+
+Repeat for the 1200m resolution:
+
+```{r}
+prodes_1200m = lapply(def1200m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+
+for (i in 1:length(prodes_1200m)){
+  prodes_1200m[[i]][is.na(prodes_1200m[[i]])] <- 0
+}
+
+def_fraction_1200m = lapply(prodes_1200m, function(object) mean(object$values))
+
+names(def_fraction_1200m) <- year
+def_fraction_1200m
+```
+
+Repeat for the 3000m resolution:
+
+```{r}
+prodes_3000m = lapply(def3000m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+
+for (i in 1:length(prodes_3000m)){
+  prodes_3000m[[i]][is.na(prodes_3000m[[i]])] <- 0
+}
+
+def_fraction_3000m = lapply(prodes_3000m, function(object) mean(object$values))
+
+names(def_fraction_3000m) <- year
+def_fraction_3000m
+```
+
+Repeat for the 6000m resolution:
+
+```{r}
+prodes_6000m = lapply(def6000m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+
+for (i in 1:length(prodes_6000m)){
+  prodes_6000m[[i]][is.na(prodes_6000m[[i]])] <- 0
+}
+
+def_fraction_6000m = lapply(prodes_6000m, function(object) mean(object$values))
+
+names(def_fraction_6000m) <- year
+def_fraction_6000m
+```
+
+Repeat for the 9000m resolution:
+
+```{r}
+prodes_9000m = lapply(def9000m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+
+for (i in 1:length(prodes_9000m)){
+  prodes_9000m[[i]][is.na(prodes_9000m[[i]])] <- 0
+}
+
+def_fraction_9000m = lapply(prodes_9000m, function(object) mean(object$values))
+
+names(def_fraction_9000m) <- year
+def_fraction_9000m
+```
+
+Repeat for the 12000m resolution:
+
+```{r}
+prodes_12000m = lapply(def12000m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>% setNames("values")})
+
+
+for (i in 1:length(prodes_12000m)){
+  prodes_12000m[[i]][is.na(prodes_12000m[[i]])] <- 0
+}
+
+def_fraction_12000m = lapply(prodes_12000m, function(object) mean(object$values))
+
+names(def_fraction_12000m) <- year
+def_fraction_12000m
+```
+
+```{r}
+cs <- c("30","60", "90", "120", "300", "600", "900", "1200", "3000", "6000", "9000", "12000")
+
+year <- c(2002, 2004, 2006, 2008, 2010, 2012, 2014, 2016, 2018, 2020, 2022, 2024)
+resolutions <- cs
+
+# Import fonts once, as the font "Rockwell" was imported seperately
+# Optional step
+
+font_import()  
+loadfonts(device = "win")  # for Windows
+
+## 1. Grey baseline (20 m) repeated
+
+y_baseline <- as.numeric(def_fraction_30m)
+df_base <- data.frame(
+  year = rep(year, times = length(resolutions)),
+  value = rep(y_baseline, times = length(resolutions)),
+  resolution = rep(paste0(resolutions, " m"), each = length(year))
+)
+
+## 2. Methods (MC & GQ) per resolution
+
+df_methods <- lapply(resolutions, function(res) {
+  
+  y <- as.numeric(get(paste0("def_fraction_", res, "m")))
+  
+  e_mc <- as.numeric(c(se_mc_df_2002[res], se_mc_df_2004[res], se_mc_df_2006[res], se_mc_df_2008[res], se_mc_df_2010[res], se_mc_df_2012[res], se_mc_df_2014[res], se_mc_df_2016[res], se_mc_df_2018[res], se_mc_df_2020[res], se_mc_df_2022[res], se_mc_df_2024[res]))
+  
+  e_gq <- as.numeric(c(se_gq_df_2002[res], se_gq_df_2004[res], se_gq_df_2006[res], se_gq_df_2008[res], se_gq_df_2010[res], se_gq_df_2012[res], se_gq_df_2014[res], se_gq_df_2016[res], se_gq_df_2018[res], se_gq_df_2020[res], se_gq_df_2022[res], se_gq_df_2024[res]))
+  
+  rbind(
+    data.frame(year, value = y, error = e_mc,
+               method = "Monte-Carlo", resolution = paste0(res, " m")),
+    data.frame(year, value = y, error = e_gq,
+               method = "Gauss-Quadrature", resolution = paste0(res, " m"))
+  )
+}) %>% bind_rows()
+
+## 3. Factor for numeric ordering (alphabetical instead of numeric)
+
+df_base$resolution <- factor(df_base$resolution, levels = paste0(resolutions, " m"))
+df_methods$resolution <- factor(df_methods$resolution, levels = paste0(resolutions, " m"))
+
+## 4. Global y-axis
+
+y_min <- min(c(df_base$value, df_methods$value - 2*df_methods$error), na.rm = TRUE)
+y_max <- max(c(df_base$value, df_methods$value + 2*df_methods$error), na.rm = TRUE)
+padding <- 0.02
+y_limits <- c(y_min - padding, y_max + padding)
+
+## Optional
+## 5. Professional complementary colors (muted teal & muted orange/red)
+
+method_colors <- c("Monte-Carlo" = "#1B9E77",  
+                   "Gauss-Quadrature" = "#D95F02") 
+
+
+## 6. Plot
+
+p <- ggplot() +
+  # Grey baseline (fixed 30 m)
+  geom_line(data = df_base,
+            aes(x = year, y = value),
+            color = "grey50", linewidth = 0.9) +
+  
+  # Methods
+  geom_line(data = df_methods,
+            aes(x = year, y = value,
+                color = method,
+                linetype = method),
+            linewidth = 0.8) +
+  
+  geom_point(data = df_methods,
+             aes(x = year, y = value),
+             color = method_colors[df_methods$method],
+             size = 2) +  # slightly larger for visibility
+  
+  geom_errorbar(data = df_methods,
+                aes(x = year,
+                    ymin = value - 2*error,
+                    ymax = value + 2*error,
+                    color = method),
+                width = 0.8,
+                linewidth = 0.5) +
+  
+  facet_wrap(~ resolution, ncol = 4) +
+  
+  scale_color_manual(values = method_colors) +
+  scale_linetype_manual(values = c("Monte-Carlo" = "dashed",
+                                   "Gauss-Quadrature" = "dotted")) +
+  
+  labs(
+    x = "Year",
+    y = "Non-Forest Fraction",
+    color = "Method",
+    linetype = "Method"
+  ) +
+  
+  coord_cartesian(ylim = y_limits) +  # global y-axis
+  
+  theme_minimal(base_family="Rockwell", base_size = 14) +  # larger base font
+  theme(
+    text = element_text(family = "Rockwell"),
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.text = element_text(size = 9),
+    axis.title = element_text(size = 11),
+    panel.grid.minor = element_blank()
+  )
+
+## 7. Save high-resolution TIFF (A4)
+#  tiff("Deforestation_facet_plot.tiff", width = 8.27, height = 11.69, units = "in",
+#      res = 1200, compression = "lzw") 
+# print(p)
+# dev.off()
+
+## 7. Save high-resolution PDF (A4)
+cairo_pdf("Deforestation_facet_plot.pdf", width = 8.27, height = 11.69) 
+print(p)
+dev.off()
+
+# Embed the external font in the PDF
+extrafont::embed_fonts("Deforestation_facet_plot.pdf", outfile = "Deforestation_facet_plot_embedded.pdf")
+```
+
+```{r}
+save.image("Deforestation_facet_plot.rda")
+```
