@@ -1,0 +1,529 @@
+---
+title: "Results Figures"
+author: "Yomna Eid"
+date: "2026-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load packages and check for the correct working directory, and make sure that the data is locally present in the ./Data, and the results in the ./Results folder within your directory. 
+
+```{r}
+library(stars)
+library(osmdata)
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+
+getwd()
+# or
+#setwd("./Results/Imperviousness")
+```
+
+Sort the downsampled raster files into lists based on their resolution:
+
+```{r}
+imp20m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_20m.tif$", recursive = TRUE,  full.names = TRUE)
+imp40m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_40m.tif$", recursive = TRUE,  full.names = TRUE)
+imp80m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_80m.tif$", recursive = TRUE,  full.names = TRUE)
+imp100m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_100m.tif$", recursive = TRUE,  full.names = TRUE)
+imp200m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_200m.tif$", recursive = TRUE,  full.names = TRUE)
+imp400m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_400m.tif$", recursive = TRUE,  full.names = TRUE)
+imp800m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_800m.tif$", recursive = TRUE,  full.names = TRUE)
+imp1000m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_1000m.tif$", recursive = TRUE,  full.names = TRUE)
+imp2000m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_2000m.tif$", recursive = TRUE,  full.names = TRUE)
+imp4000m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_4000m.tif$", recursive = TRUE,  full.names = TRUE)
+imp8000m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_8000m.tif$", recursive = TRUE,  full.names = TRUE)
+imp10000m_files <- list.files(path = "./Results/Imperviousness", pattern = "\\_10000m.tif$", recursive = TRUE,  full.names = TRUE)
+```
+
+Load the standard error values computed in the previous step for the time-series:
+
+```{r}
+load("./Results/Imperviousness/2006_sampling.rda")
+se_mc2006 <- se_mc
+se_gq2006 <- se_gq
+load("./Results/Imperviousness/2009_sampling.rda")
+se_mc2009 <- se_mc
+se_gq2009 <- se_gq
+load("./Results/Imperviousness/2012_sampling.rda")
+se_mc2012 <- se_mc
+se_gq2012 <- se_gq
+load("./Results/Imperviousness/2015_sampling.rda")
+se_mc2015 <- se_mc
+se_gq2015 <- se_gq
+load("./Results/Imperviousness/2018_sampling.rda")
+se_mc2018 <- se_mc
+se_gq2018 <- se_gq
+
+cs <- c("20","40", "80", "100", "200", "400", "800", "1000", "2000", "4000", "8000", "10000")
+```
+
+Load and read the raster files for the 20m native resolution, then label them for each time-stamp year of the time-series:
+
+```{r}
+imperv_20m = lapply(imp20m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+for (i in 1:length(imperv_20m)){
+  imperv_20m[[i]][is.na(imperv_20m[[i]])] <- 0
+}
+
+imp_fraction_20m = lapply(imperv_20m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_20m) <- year
+imp_fraction_20m
+```
+
+Repeat for the 40m resolution, and harmonize the time-stamp for year 2018 with the rest of the time-series (due to changes in the offset values). Plot to check:
+
+```{r}
+imperv_40m = lapply(imp40m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_40m[[5]] <- read_stars(imp40m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_40m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_40m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_40m[[4]])$y$offset
+
+st_dimensions(imperv_40m[[5]]) <- dims
+
+imperv_40m[[5]] <- st_crop(imperv_40m[[5]], p)
+
+for (i in 1:length(imperv_40m)){
+  imperv_40m[[i]][is.na(imperv_40m[[i]])] <- 0
+}
+
+# Calculate the imperviousness fraction
+imp_fraction_40m = lapply(imperv_40m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_40m) <- year
+imp_fraction_40m
+
+ggplot() +
+  #geom_sf(data = t, fill = NA, color = "red") +
+  geom_sf(data = p, fill = "lightgreen", color = "darkgreen") +
+  #geom_sf(data = imperv_40m[[5]], fill = "red", alpha = 0.5, color = "red", size = 1) +
+  geom_tile(data = na.omit(as.data.frame(imperv_40m[[5]]), xy = TRUE), aes(x = x, y = y, fill = values)) +   # Raster
+  geom_tile(data = na.omit(as.data.frame(imperv_40m[[4]]), xy = TRUE), aes(x = x, y = y, fill = values)) +   # Raster
+  theme_minimal() +
+  ggtitle("Imperviousness Polygon Overlaid on Münster - Year 2018")
+
+```
+
+Repeat for 80m resolution:
+
+```{r}
+imperv_80m = lapply(imp80m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_80m[[5]] <- read_stars(imp80m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_80m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_80m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_80m[[4]])$y$offset
+
+st_dimensions(imperv_80m[[5]]) <- dims
+
+imperv_80m[[5]] <- st_crop(imperv_80m[[5]], p)
+
+for (i in 1:length(imperv_80m)){
+  imperv_80m[[i]][is.na(imperv_80m[[i]])] <- 0
+}
+
+imp_fraction_80m = lapply(imperv_80m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_80m) <- year
+imp_fraction_80m
+```
+
+Repeat for 100m resolution:
+
+```{r}
+imperv_100m = lapply(imp100m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_100m[[5]] <- read_stars(imp100m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_100m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_100m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_100m[[4]])$y$offset
+
+st_dimensions(imperv_100m[[5]]) <- dims
+
+imperv_100m[[5]] <- st_crop(imperv_100m[[5]], p)
+
+for (i in 1:length(imperv_100m)){
+  imperv_100m[[i]][is.na(imperv_100m[[i]])] <- 0
+}
+
+imp_fraction_100m = lapply(imperv_100m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_100m) <- year
+imp_fraction_100m
+```
+
+Repeat for 200m resolution:
+
+```{r}
+imperv_200m = lapply(imp200m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_200m[[5]] <- read_stars(imp200m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_200m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_200m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_200m[[4]])$y$offset
+
+st_dimensions(imperv_200m[[5]]) <- dims
+
+imperv_200m[[5]] <- st_crop(imperv_200m[[5]], p)
+
+for (i in 1:length(imperv_200m)){
+  imperv_200m[[i]][is.na(imperv_200m[[i]])] <- 0
+}
+
+imp_fraction_200m = lapply(imperv_200m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_200m) <- year
+imp_fraction_200m
+```
+
+Repeat for 400m resolution:
+
+```{r}
+imperv_400m = lapply(imp400m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_400m[[5]] <- read_stars(imp400m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_400m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_400m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_400m[[4]])$y$offset
+
+st_dimensions(imperv_400m[[5]]) <- dims
+
+imperv_400m[[5]] <- st_crop(imperv_400m[[5]], p)
+
+for (i in 1:length(imperv_400m)){
+  imperv_400m[[i]][is.na(imperv_400m[[i]])] <- 0
+}
+
+imp_fraction_400m = lapply(imperv_400m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_400m) <- year
+imp_fraction_400m
+```
+
+Repeat for 800m resolution:
+
+```{r}
+imperv_800m = lapply(imp800m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_800m[[5]] <- read_stars(imp800m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_800m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_800m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_800m[[4]])$y$offset
+
+st_dimensions(imperv_800m[[5]]) <- dims
+
+imperv_800m[[5]] <- st_crop(imperv_800m[[5]], p)
+
+for (i in 1:length(imperv_800m)){
+  imperv_800m[[i]][is.na(imperv_800m[[i]])] <- 0
+}
+
+imp_fraction_800m = lapply(imperv_800m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_800m) <- year
+imp_fraction_800m
+```
+
+Repeat for 1000m resolution:
+
+```{r}
+imperv_1000m = lapply(imp1000m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_1000m[[5]] <- read_stars(imp1000m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_1000m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_1000m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_1000m[[4]])$y$offset
+
+st_dimensions(imperv_1000m[[5]]) <- dims
+
+imperv_1000m[[5]] <- st_crop(imperv_1000m[[5]], p)
+
+for (i in 1:length(imperv_1000m)){
+  imperv_1000m[[i]][is.na(imperv_1000m[[i]])] <- 0
+}
+
+imp_fraction_1000m = lapply(imperv_1000m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_1000m) <- year
+imp_fraction_1000m
+```
+
+Repeat for 2000m resolution:
+
+```{r}
+imperv_2000m = lapply(imp2000m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_2000m[[5]] <- read_stars(imp2000m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_2000m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_2000m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_2000m[[4]])$y$offset
+
+st_dimensions(imperv_2000m[[5]]) <- dims
+
+imperv_2000m[[5]] <- st_crop(imperv_2000m[[5]], p)
+
+for (i in 1:length(imperv_2000m)){
+  imperv_2000m[[i]][is.na(imperv_2000m[[i]])] <- 0
+}
+
+imp_fraction_2000m = lapply(imperv_2000m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_2000m) <- year
+imp_fraction_2000m
+```
+
+Repeat for 4000m resolution:
+
+```{r}
+imperv_4000m = lapply(imp4000m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_4000m[[5]] <- read_stars(imp4000m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_4000m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_4000m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_4000m[[4]])$y$offset
+
+st_dimensions(imperv_4000m[[5]]) <- dims
+
+imperv_4000m[[5]] <- st_crop(imperv_4000m[[5]], p)
+
+for (i in 1:length(imperv_4000m)){
+  imperv_4000m[[i]][is.na(imperv_4000m[[i]])] <- 0
+}
+
+imp_fraction_4000m = lapply(imperv_4000m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_4000m) <- year
+imp_fraction_4000m
+```
+
+Repeat for 8000m resolution:
+
+```{r}
+imperv_8000m = lapply(imp8000m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_8000m[[5]] <- read_stars(imp8000m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_8000m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_8000m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_8000m[[4]])$y$offset
+
+st_dimensions(imperv_8000m[[5]]) <- dims
+
+imperv_8000m[[5]] <- st_crop(imperv_8000m[[5]], p)
+
+for (i in 1:length(imperv_8000m)){
+  imperv_8000m[[i]][is.na(imperv_8000m[[i]])] <- 0
+}
+
+imp_fraction_8000m = lapply(imperv_8000m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_8000m) <- year
+imp_fraction_8000m
+```
+
+Repeat for 10km resolution:
+
+```{r}
+imperv_10000m = lapply(imp10000m_files, function(file) {read_stars(file, NA_value = 250, proxy = FALSE) %>%  st_crop(p) %>% setNames("values")})
+
+# Correct offset in 2018 causing chaos
+imperv_10000m[[5]] <- read_stars(imp10000m_files[[5]], NA_value = 250, proxy = FALSE) %>% setNames("values")
+
+dims <- st_dimensions(imperv_10000m[[5]])
+
+dims$x$offset <- st_dimensions(imperv_10000m[[4]])$x$offset
+dims$y$offset <- st_dimensions(imperv_10000m[[4]])$y$offset
+
+st_dimensions(imperv_10000m[[5]]) <- dims
+
+imperv_10000m[[5]] <- st_crop(imperv_1000m[[5]], p)
+
+for (i in 1:length(imperv_10000m)){
+  imperv_10000m[[i]][is.na(imperv_10000m[[i]])] <- 0
+}
+
+imp_fraction_10000m = lapply(imperv_10000m, function(object) mean(object$values))
+
+year = c(2006, 2009, 2012, 2015, 2018)
+names(imp_fraction_10000m) <- year
+imp_fraction_10000m
+```
+  
+```{r}
+cs <- c("20","40", "80", "100", "200", "400", "800", "1000", "2000", "4000", "8000", "10000")
+
+year <- c(2006, 2009, 2012, 2015, 2018)
+resolutions <- cs
+
+# Import fonts once, as the font "Rockwell" was imported seperately
+# Optional step
+
+font_import() 
+loadfonts(device = "win")  # for Windows
+
+## 1. Grey baseline (20 m) repeated
+
+y_baseline <- as.numeric(imp_fraction_20m)
+df_base <- data.frame(
+  year = rep(year, times = length(resolutions)),
+  value = rep(y_baseline, times = length(resolutions)),
+  resolution = rep(paste0(resolutions, " m"), each = length(year))
+)
+
+## 2. Methods (MC & GQ) per resolution
+
+df_methods <- lapply(resolutions, function(res) {
+  
+  y <- as.numeric(get(paste0("imp_fraction_", res, "m")))
+  
+  e_mc <- as.numeric(c(se_mc2006[res], se_mc2009[res], se_mc2012[res],
+                       se_mc2015[res], se_mc2018[res]))
+  
+  e_gq <- as.numeric(c(se_gq2006[res], se_gq2009[res], se_gq2012[res],
+                       se_gq2015[res], se_gq2018[res]))
+  
+  rbind(
+    data.frame(year, value = y, error = e_mc,
+               method = "Monte-Carlo", resolution = paste0(res, " m")),
+    data.frame(year, value = y, error = e_gq,
+               method = "Gauss-Quadrature", resolution = paste0(res, " m"))
+  )
+}) %>% bind_rows()
+
+## 3. Factor for numeric ordering (alphabetical instead of numeric)
+
+df_base$resolution <- factor(df_base$resolution, levels = paste0(resolutions, " m"))
+df_methods$resolution <- factor(df_methods$resolution, levels = paste0(resolutions, " m"))
+
+## 4. Global y-axis
+
+y_min <- min(c(df_base$value, df_methods$value - 2*df_methods$error), na.rm = TRUE)
+y_max <- max(c(df_base$value, df_methods$value + 2*df_methods$error), na.rm = TRUE)
+padding <- 0.02
+y_limits <- c(y_min - padding, y_max + padding)
+
+## Optional
+## 5. Professional complementary colors (muted teal & muted orange/red)
+
+method_colors <- c("Monte-Carlo" = "#1B9E77",   
+                   "Gauss-Quadrature" = "#D95F02")
+
+## 6. Plot
+
+p <- ggplot() +
+  # Grey baseline (fixed 20 m)
+  geom_line(data = df_base,
+            aes(x = year, y = value),
+            color = "grey50", linewidth = 0.9) +
+  
+  # Methods
+  geom_line(data = df_methods,
+            aes(x = year, y = value,
+                color = method,
+                linetype = method),
+            linewidth = 0.8) +
+  
+  geom_point(data = df_methods,
+             aes(x = year, y = value),
+             color = method_colors[df_methods$method],
+             size = 2) +  # slightly larger for visibility
+  
+  geom_errorbar(data = df_methods,
+                aes(x = year,
+                    ymin = value - 2*error,
+                    ymax = value + 2*error,
+                    color = method),
+                width = 0.7,
+                linewidth = 0.5) +
+  
+  facet_wrap(~ resolution, ncol = 4) +
+  
+  scale_color_manual(values = method_colors) +
+  scale_linetype_manual(values = c("Monte-Carlo" = "dashed",
+                                   "Gauss-Quadrature" = "dotted")) +
+  
+  labs(
+    x = "Year",
+    y = "Imperviousness Fraction",
+    color = "Method",
+    linetype = "Method"
+  ) +
+  
+  coord_cartesian(ylim = y_limits) +  # global y-axis
+  
+  theme_minimal(base_size = 14) +  # larger base font
+  theme(
+    text = element_text(family = "Rockwell"),
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.text = element_text(size = 9),
+    axis.title = element_text(size = 11),
+    panel.grid.minor = element_blank()
+  )
+
+## 7. Save high-resolution TIFF (A4)
+#  tiff("Imperviousness_facet_plot.tiff", width = 8.27, height = 11.69, units = "in",
+#      res = 1200, compression = "lzw") 
+# print(p)
+# dev.off()
+
+## 7. Save high-resolution PDF (A4)
+cairo_pdf("Imperviousness_facet_plot.pdf", width = 8.27, height = 11.69) 
+print(p)
+dev.off()
+
+# Embed the external font in the PDF
+extrafont::embed_fonts("Imperviousness_facet_plot.pdf", outfile = "Imperviousness_facet_plot_embedded.pdf")
+```
+
+```{r}
+save.image("Imperviousness_facet_plot.rda")
+```
