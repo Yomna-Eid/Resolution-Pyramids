@@ -1,7 +1,7 @@
 ---
 title: "MonteCarlo_GaussQuad"
 author: "Yomna Eid"
-date: "2025-01-15"
+date: "2026-03"
 output: html_document
 ---
 
@@ -9,19 +9,34 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-import data:
+Load packages and check directory:
+
 ```{r}
 library(stars)
 library(osmdata)
 library(ggplot2)
 library(gstat)
 
-#r <- read_stars(r"(C:\Users\yeid\Documents\Dead Laptop Files\Documents\1b. PhD\2. On-going Publications\1. Downsampling\Downsampled_Output\2006\impervious2006_20m.tif)", na.rm = TRUE) |> setNames("IMP2006") %>% st_as_stars() %>% na.omit()
-#r <- read_stars(r"(C:\Users\yeid\Documents\Dead Laptop Files\Documents\1b. PhD\2. On-going Publications\1. Downsampling\Downsampled_Output\2009\impervious2009_20m.tif)", na.rm = TRUE) |> setNames("IMP2006") %>% st_as_stars() %>% na.omit()
-#r <- read_stars(r"(C:\Users\yeid\Documents\Dead Laptop Files\Documents\1b. PhD\2. On-going Publications\1. Downsampling\Downsampled_Output\2012\impervious2012_20m.tif)", na.rm = TRUE) |> setNames("IMP2006") %>% st_as_stars() %>% na.omit()
-r <- read_stars(r"(C:\Users\yeid\Documents\Dead Laptop Files\Documents\1b. PhD\2. On-going Publications\1. Downsampling\Downsampled_Output\2015\impervious2015_20m.tif)", na.rm = TRUE) |> setNames("IMP2006") %>% st_as_stars() %>% na.omit()
-#r <- read_stars(r"(C:\Users\yeid\Documents\Dead Laptop Files\Documents\1b. PhD\2. On-going Publications\1. Downsampling\Downsampled_Output\2018\impervious2018_20m.tif)", na.rm = TRUE) |> setNames("IMP2006") %>% st_as_stars() %>% na.omit()
+## check the working directory
 
+#getwd()
+this.dir <- "./Results/Imperviousness"
+setwd(this.dir)
+```  
+
+Load the data (and reiterate the calculation for every r (Raster image for every year in the time-series at native resolution)):
+
+```{r}
+r <- read_stars("./2006/impervious2006_20m.tif", na.rm = TRUE) |> setNames("IMP2006") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2009/impervious2009_20m.tif", na.rm = TRUE) |> setNames("IMP2009") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2012/impervious2012_20m.tif", na.rm = TRUE) |> setNames("IMP2012") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2015/impervious2015_20m.tif", na.rm = TRUE) |> setNames("IMP2015") %>% st_as_stars() %>% na.omit()
+#r <- read_stars("./2018/impervious2018_20m.tif", na.rm = TRUE) |> setNames("IMP2018") %>% st_as_stars() %>% na.omit()
+```
+
+Get Münster, Germany administrative boundaries and crop raster to its bounding-box, then plot:
+
+```{r}
 munster_query <- opq("Münster, Germany") %>% 
   add_osm_feature(key = "boundary", value = "administrative") %>% 
   add_osm_feature(key = "name", value = "Münster") %>% 
@@ -35,26 +50,28 @@ munster <- st_crop(r, p)
 r <- munster %>% na.omit()
 
 ggplot() +
-  geom_tile(data = na.omit(as.data.frame(r, xy = TRUE)), aes(x = x, y = y, fill = IMP2006)) +   # Raster
+  geom_tile(data = na.omit(as.data.frame(r, xy = TRUE)), aes(x = x, y = y, fill = names(r))) +   # Raster
   scale_fill_viridis_c() +
   geom_sf(data = p, fill = NA, color = "black", size = 2) +   # Polygon overlay
   theme_minimal() +
   ggtitle("Imperviousness Map of Münster")
 ```
 
-compute the variance of the raster image:
+Compute the variance of the raster image:
+
 ```{r}
 (v = var(as.vector(r[[1]]), na.rm = TRUE))
 ```
 
 The different grid sizes:
+
 ```{r}
 gridsizes = c(20, 40, 80, 100, 200, 400, 800, 1000, 2000, 4000, 8000, 10000)
 thinning = gridsizes / 10
 ```
 
-Compute the standard errors associated with the different grid sizes, for
-random sampling:
+Compute the standard errors associated with the different grid sizes, for random sampling:
+
 ```{r}
 (n = prod(dim(r)) / (thinning^2))
 (se.random_sampling = sqrt(v/n))
@@ -63,30 +80,30 @@ se.random_sampling
 ```
 
 Now do this for regular sampling, using Ripley 1981:
+
 ```{r}
 set.seed(1353)
 pts = st_sample(p, 6000)
 r.sample = st_extract(r, pts) %>% na.omit()
 dist = gridsizes
 
-v = variogram(IMP2006~1, r.sample, boundaries = dist)
+v = variogram(names(r)~1, r.sample, boundaries = dist)
 plot(v)
 m = "Exp"
 v0 = vgm(.1, m, 100)
 (v.model = fit.variogram(v, vgm(.1, m, 500, add.to = v0)))
 plot(v, v.model)
-
-#mean(variogramLine(v.model, covariance = TRUE, dist_vector = d, n)$gamma)
-#v.model
 ```
-To test our implemetation of the methods, we use a pure nugget effect variogram model:
+
+To test the implementation of the method, use a pure nugget effect variogram model:
+
 ```{r}
-# set.seed(123)
+#set.seed(123)
 # pts <- cbind(runif(100), runif(100)) %>% st_multipoint() %>% st_sfc()
 # data <- rnorm(100)
 # sample_data  <- st_sf(coords = pts, x = data)
-# 
-# v <- variogram(x ~ 1, sample_data)
+ 
+#v <- variogram(x ~ 1, sample_data)
 # plot(v)
 # nugget_model <- vgm(psill = 1, model = "Nug", range = 0, nugget = 1)
 # v.model <- fit.variogram(v, model = nugget_model)
@@ -96,8 +113,8 @@ To test our implemetation of the methods, we use a pure nugget effect variogram 
 
 1. MONTE-CARLO INTEGRATION
 
-Compute the mean block-block covariance function value, using random sampling
-(Monte-Carlo integration):
+Compute the mean block-block covariance function value, using random sampling (Monte-Carlo integration):
+
 ```{r}
 n = 1e4
 make_unif_pts = function(bbox, n) {
@@ -122,12 +139,10 @@ mean_cov = function(x, y, model) {
 x = make_unif_pts(st_bbox(r), n)
 y = make_unif_pts(st_bbox(r), n)
 (C_mean = mean_cov(x, y, v.model))
-#(C_mean = mean_cov(x, y, v.model2))
-
 ```
 
-Create a function that computes the SE using Ripley's 1981 eq. 3.4 (page 23),
-and use it:
+Create a function that computes the SE using Ripley's 1981 eq. 3.4 (page 23), and use it:
+
 ```{r}
 make_grid = function(size, bbox, n = Inf) {
   set.seed(13531)
@@ -149,7 +164,6 @@ compute_se = function(size, model, maxpts = 1e3, C_mean) {
 	sqrt(max(var, 0))
 }
 
-#sel = -(1:5)
 sel = TRUE
 se_mc = sapply(gridsizes[sel], compute_se, model = v.model, C_mean = C_mean)
 names(se_mc) = gridsizes[sel]
@@ -159,7 +173,7 @@ se.random_sampling
 
 2. GAUSS-QUADRATURE
 
-Now compute the mean covariance function value, using deterministic rather than stochastic method of Gauss Quadrature, using systematic/symmetric sampling. First, we define our Gaussian points and weights for a [-1,1] integral limits as follows:
+Now compute the mean covariance function value, using deterministic (rather than stochastic) method of Gauss Quadrature, using systematic/symmetric sampling. First, define the Gaussian points and weights for integral limits of [-1,1], as follows:
 
 ```{r}
 # Define Gaussian quadrature points and weights
@@ -201,24 +215,25 @@ gauss_w <- c(0.00452127709853319126, 0.01049828453115281362, 0.01642105838190788
   }}
 ```
 
-Now we compute the mean block-block covariance value using Gauss Quadrature for a our raster image (i.e. 2-dimensional grid):
+Now compute the mean block-block covariance value using Gauss Quadrature for the raster image (i.e. 2-dimensional grid):
 
 ```{r}
 # Define the covariance function for a cumulative nugget effect
 cov_func <- function(x2, y2, x1, y1) {
   # Compute h as the Euclidean distance
   h <- sqrt((x1 - x2)**2 + (y1 - y2)**2)
-  # # Calculate the covariance: equals nugget_sill when h = 0, otherwise 0
-  #if (h < 1e-8) {
-  #     return(0) # Assuming this is the nugget effect variance
-  #   } else {
-  #     return(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma)
-  #     }
-return(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma)
- # Covariance function based on h
- # term1 <- v.model$psill[1] * (exp(-h/v.model$range[1]))
-  #term2 <- v.model$psill[2] * (exp(-h/v.model$range[2]))
-  #return(term1 + term2) 
+   # Calculate the covariance: equals nugget_sill when h = 0, otherwise 0
+  if (h < 1e-8) {
+       return(0) # Assuming this is the nugget effect variance (i.e. no nugget effect)
+     } else {
+       return(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma)
+       }
+#return(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma)
+
+## Covariance function based on h (equivalent to above but without using gstat package function)
+ #term1 <- v.model$psill[1] * (exp(-h/v.model$range[1]))
+ #term2 <- v.model$psill[2] * (exp(-h/v.model$range[2]))
+ #return(term1 + term2) 
  #    }
 }
 
@@ -226,6 +241,7 @@ return(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma)
 # Where n is the no. of Gaussian points, and r is the raster image
 gaussian_quadrature_2d <- function(n, cov_func, r) {
 
+  t <- Sys.time()
   # Extract integration limits
   bbox <- st_bbox(r)
   x_min <- bbox["xmin"]
@@ -286,6 +302,7 @@ gaussian_quadrature_2d <- function(n, cov_func, r) {
   area <- (x_max - x_min) * (y_max - y_min)
   integral_value <- integral_value / area**2
   return(integral_value)
+  return(print(Sys.time() - t))
 }
 
 # Compute the integral
@@ -297,7 +314,7 @@ bb_cov <- gaussian_quadrature_2d(40, cov_func, r)
 cat("The integral of the covariance function over the domain is:", bb_cov, "\n")
 ```
 
-Now we compute the mean block-sample covariance value using Gauss Quadrature for a our raster image (i.e. 2-dimensional grid):
+Now compute the mean block-sample covariance value using Gauss Quadrature for the raster image (i.e. 2-dimensional grid):
 
 ```{r}
 # Define the covariance function for a cumulative nugget effect
@@ -305,12 +322,12 @@ cov_func <- function(x0, y0, x1, y1) {
   # Compute h as the Euclidean distance
   h <- sqrt((x1 - x0)**2 + (y1 - y0)**2)
   # Calculate the covariance: equals nugget_sill when h = 0, otherwise 0
-  #if (h == 0) {
-  #  return(1) # Assuming this is the nugget effect variance
-  #} else {
-  #  return(0)}
+  if (h < 1e-8) {
+    return(0) # Assuming this is the nugget effect variance (i.e. no nugget effect)
+  } else {
   return(variogramLine(v.model, covariance = TRUE, dist_vector = h)$gamma)
   }
+}
 
 # Function to perform Gaussian quadrature in 2D
 gaussian_quadrature_2d <- function(n, cov_func, r, grid_size) {
@@ -368,6 +385,7 @@ gaussian_quadrature_2d <- function(n, cov_func, r, grid_size) {
 }
 
 compute_for_gridsizes <- function(gridsizes, cov_func, r) {
+  x <- Sys.time()
   results <- vector("list", length(gridsizes))
   names(results) <- as.character(gridsizes)
   
@@ -378,16 +396,18 @@ compute_for_gridsizes <- function(gridsizes, cov_func, r) {
     results[[i]] <- result
   }
   return(results)
+  return(print(Sys.time() - x))
 }
 
 # Compute the integral
 bs_cov <- compute_for_gridsizes(gridsizes, cov_func, r)
 
 # Print the result
-cat("The integral of the covariance function over the domain is:", bs_cov, "\n")
+print(bs_cov)
+#cat("The integral of the covariance function over the domain is:", bs_cov, "\n")
 ```
 
-Point-Point:
+Point-Point covariance:
 
 ```{r}
 #grd = make_grid(gridsizes[[1]], st_bbox(r), 1e4)
@@ -431,9 +451,51 @@ names(se_gq) <- gridsizes
 se_gq
 ```
 
+End of analysis
+
 Save:
+```{r}
+rm(r) # redunant saving of r raster-stack
+
+save.image(paste0(names(r), "_sampling.rda"))
+```
+
 
 ```{r}
-rm(r) # big
-save.image("sampling.rda")
+## Convergence graph of Monte Carlo estimates vs. Gauss Quadrature estimates
+
+# Number of Monte Carlo samples
+n <- 1e4
+
+# Generate points
+x_mc <- make_unif_pts(st_bbox(r), n)
+y_mc <- make_unif_pts(st_bbox(r), n)
+
+# Monte Carlo block-block covariance
+C_mc <- mean_cov(x_mc, y_mc, v.model)
+cat("Monte Carlo Estimate:", C_mc, "\n")
+
+# Gaussian Quadrature block-block covariance
+C_gq <- gaussian_quadrature_2d(cov_func, r)
+cat("Gaussian Quadrature Estimate:", C_gq, "\n")
+
+sample_sizes <- seq(500, 10000, by = 500)
+mc_vals <- numeric(length(sample_sizes))
+
+for (i in seq_along(sample_sizes)) {
+  n <- sample_sizes[i]
+  x_tmp <- make_unif_pts(st_bbox(r), n)
+  y_tmp <- make_unif_pts(st_bbox(r), n)
+  mc_vals[i] <- mean_cov(x_tmp, y_tmp, v.model)
+}
+
+# Plot convergence
+plot(sample_sizes, mc_vals, type = "b", col = "blue", pch = 19,
+     xlab = "Number of Samples (n)",
+     ylab = "Monte Carlo Estimate of Covariance",
+     main = "Convergence of Monte Carlo Estimate")
+abline(h = C_gq, col = "red", lty = 2)
+legend("topright", legend = c("Monte Carlo", "Gaussian Quadrature"),
+       col = c("blue", "red"), lty = c(1, 2), pch = c(19, NA))
+
 ```
