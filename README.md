@@ -87,7 +87,7 @@ The code is written in R and relies on standard geospatial and numerical librari
 ```
 
 ## Data
-The datasets used in this study are publicly available Earth Observation products but are not included in this repository due to their size (~GB scale) and licensing restritions.
+The datasets used in this study are publicly available Earth Observation products but are not included in this repository due to their size (~GB scale) and licensing restrictions.
 
 The datasets used in this study are publicly available but are not included in this repository due to their size and licensing restrictions. They were acquired from the following official services:
 
