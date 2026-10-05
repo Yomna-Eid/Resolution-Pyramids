@@ -118,4 +118,4 @@ If you use this code or methodology in your work, please cite the repository:
   } 
 ```
 
-A corresponding paper is currently under submission and will be added here once available.
+A corresponding paper is currently in preparation and will be added here once available.
